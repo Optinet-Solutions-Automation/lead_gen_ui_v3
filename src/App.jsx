@@ -177,19 +177,18 @@ function App() {
     }, POLL_INTERVAL_MS)
   }
 
+  const fetchLeads = async () => {
+    setTableLoading(true)
+    const { data, error } = await supabase
+      .from('google_lead_gen_table')
+      .select('*')
+      .order('id', { ascending: false })
+    if (!error) setLeads(data ?? [])
+    setTableLoading(false)
+  }
+
   // Fetch table data from Supabase on mount
-  useEffect(() => {
-    const fetchLeads = async () => {
-      setTableLoading(true)
-      const { data, error } = await supabase
-        .from('google_lead_gen_table')
-        .select('*')
-        .order('id', { ascending: false })
-      if (!error) setLeads(data ?? [])
-      setTableLoading(false)
-    }
-    fetchLeads()
-  }, [])
+  useEffect(() => { fetchLeads() }, [])
 
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [])
@@ -230,6 +229,7 @@ function App() {
 
   const handleModalClose = () => {
     stopPolling()
+    if (modal?.phase === 'success') fetchLeads()
     setModal(null)
   }
 
