@@ -1,0 +1,339 @@
+/* ── Layout ──────────────────────────────────────────── */
+#root {
+  min-height: 100vh;
+  background-color: #f0f2f5;
+}
+
+.container {
+  padding: 2rem 1.5rem;
+}
+
+/* ── Title ───────────────────────────────────────────── */
+.title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #1a2e44;
+  margin-bottom: 1.25rem;
+  letter-spacing: -0.3px;
+}
+
+/* ── Search bar card ─────────────────────────────────── */
+.search-card {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.input-keyword {
+  flex: 1;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  color: #333;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-keyword::placeholder {
+  color: #9ca3af;
+}
+
+.input-keyword:focus {
+  border-color: #1e4d6b;
+  box-shadow: 0 0 0 3px rgba(30, 77, 107, 0.1);
+}
+
+.select-country {
+  width: 220px;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  color: #333;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  padding-right: 2.25rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.select-country:focus {
+  border-color: #1e4d6b;
+  box-shadow: 0 0 0 3px rgba(30, 77, 107, 0.1);
+}
+
+.btn-submit {
+  padding: 0.65rem 1.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: #1e4d6b;
+  border: none;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+
+.btn-submit:hover {
+  background-color: #17405a;
+}
+
+.btn-submit:active {
+  background-color: #123350;
+}
+
+.btn-submit:disabled {
+  background-color: #7a9eb5;
+  cursor: not-allowed;
+}
+
+.submit-error {
+  font-size: 0.82rem;
+  color: #dc2626;
+}
+
+.search-divider {
+  width: 1px;
+  height: 32px;
+  background-color: #d1d5db;
+  margin: 0 0.25rem;
+  flex-shrink: 0;
+}
+
+.input-search {
+  width: 220px;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  color: #333;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-search::placeholder {
+  color: #9ca3af;
+}
+
+.input-search:focus {
+  border-color: #1e4d6b;
+  box-shadow: 0 0 0 3px rgba(30, 77, 107, 0.1);
+}
+
+/* ── Table card ──────────────────────────────────────── */
+.table-card {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.leads-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+/* Header */
+.leads-table thead tr {
+  background-color: #1e4d6b;
+}
+
+.leads-table th {
+  padding: 0.9rem 1.25rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #ffffff;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* Body rows */
+.leads-table tbody tr {
+  border-bottom: 1px solid #f0f2f5;
+  transition: background-color 0.15s;
+}
+
+.leads-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.leads-table tbody tr:hover {
+  background-color: #f5f8fb;
+}
+
+.leads-table td {
+  padding: 0.75rem 1.25rem;
+  color: #374151;
+  white-space: nowrap;
+}
+
+/* Remarks column — wraps sentence-length text */
+.leads-table td.col-remarks {
+  white-space: normal;
+  min-width: 280px;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+/* No data */
+.no-data {
+  text-align: center !important;
+  color: #9ca3af;
+  padding: 3rem 1rem !important;
+  font-size: 0.9rem;
+}
+
+/* ── Modal ───────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 2.25rem 2.5rem;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Icon circle */
+.modal-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.modal-icon--loading {
+  background-color: #e8f0fe;
+}
+
+.modal-icon--success {
+  background-color: #d1fae5;
+  color: #059669;
+}
+
+.modal-icon--error {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #c7d9f7;
+  border-top-color: #1e4d6b;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.modal-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a2e44;
+  margin-bottom: 0.6rem;
+}
+
+.modal-title--success { color: #059669; }
+.modal-title--error   { color: #dc2626; }
+
+.modal-message {
+  font-size: 0.92rem;
+  color: #4b5563;
+  margin-bottom: 1rem;
+  line-height: 1.55;
+}
+
+.modal-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.45rem 0.75rem;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.modal-meta-label {
+  color: #6b7280;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.modal-meta-value {
+  color: #374151;
+  word-break: break-all;
+}
+
+.modal-close-btn {
+  margin-top: 1.25rem;
+  padding: 0.55rem 2rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: #1e4d6b;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.modal-close-btn:hover {
+  background-color: #17405a;
+}
