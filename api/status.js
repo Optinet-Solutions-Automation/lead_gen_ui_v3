@@ -6,11 +6,15 @@ const redis = new Redis({
 })
 
 /**
- * GET /api/status
- * Polled by the frontend to check if n8n has sent a callback yet.
- * Returns { status: 'pending' } if not yet received.
+ * GET  /api/status  — polled by the frontend; returns { status: 'pending' } until n8n calls back
+ * DELETE /api/status — clears any stale result before a new submission
  */
 export default async function handler(req, res) {
+  if (req.method === 'DELETE') {
+    await redis.del('workflow_status')
+    return res.status(200).json({ cleared: true })
+  }
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

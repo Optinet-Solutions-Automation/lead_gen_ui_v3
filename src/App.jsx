@@ -141,6 +141,9 @@ function App() {
     setLoading(true)
 
     try {
+      // Clear any stale result from a previous submission
+      await fetch('/api/status', { method: 'DELETE' })
+
       const res = await fetch(N8N_WEBHOOK, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
