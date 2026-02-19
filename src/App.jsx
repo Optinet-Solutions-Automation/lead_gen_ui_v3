@@ -15,7 +15,7 @@ const TABLE_COLUMNS = [
   { key: 'keyword',          label: 'Keyword' },
   { key: 'country',          label: 'Country' },
   { key: 'url',              label: 'URL' },
-  { key: 'domain',           label: 'Domain' },
+  { key: 'domain',           label: 'Clean Domain' },
   { key: 'position_on_page', label: 'Position on Page' },
   { key: 'page_number',      label: 'Page #' },
   { key: 'overall_position', label: 'Overall Position' },
@@ -370,11 +370,15 @@ function App() {
               ) : (
                 leads.map((row) => (
                   <tr key={row.id}>
-                    {TABLE_COLUMNS.map((col) => (
-                      <td key={col.key} className={col.key === 'remarks' ? 'col-remarks' : undefined}>
-                        {row[col.key] ?? '—'}
-                      </td>
-                    ))}
+                    {TABLE_COLUMNS.map((col) => {
+                      const value = row[col.key] ?? '—'
+                      const className = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : undefined
+                      return (
+                        <td key={col.key} className={className} title={String(value)}>
+                          {value}
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))
               )}

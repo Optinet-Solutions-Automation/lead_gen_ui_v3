@@ -227,6 +227,21 @@
   padding: 0.75rem 1.25rem;
   color: #374151;
   white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* URL column — slightly wider before truncating */
+.leads-table td.col-url {
+  max-width: 300px;
+}
+
+/* Domain column — show full value, no truncation */
+.leads-table td.col-domain {
+  max-width: none;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 /* Remarks column — wraps sentence-length text */
@@ -234,6 +249,8 @@
   white-space: normal;
   min-width: 280px;
   max-width: 420px;
+  overflow: visible;
+  text-overflow: unset;
   line-height: 1.5;
 }
 
