@@ -27,8 +27,13 @@ const TABLE_COLUMNS = [
 function Modal({ modal, onClose }) {
   if (!modal) return null
 
+  const isLocked = modal.phase === 'loading'
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div
+      className={`modal-overlay${isLocked ? ' modal-overlay--locked' : ''}`}
+      onClick={isLocked ? undefined : onClose}
+    >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
 
         {modal.phase === 'loading' && (
@@ -176,7 +181,7 @@ function App() {
             value={country}
             onChange={(e) => setCountry(e.target.value)}
           >
-            <option value="">Country</option>
+            <option value="" disabled>Country</option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

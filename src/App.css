@@ -215,6 +215,11 @@
   justify-content: center;
   z-index: 1000;
   animation: fadeIn 0.15s ease;
+  cursor: pointer;
+}
+
+.modal-overlay--locked {
+  cursor: not-allowed;
 }
 
 @keyframes fadeIn {
