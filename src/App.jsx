@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
+import { supabase } from './supabase'
 
 const countries   = JSON.parse(import.meta.env.VITE_COUNTRIES)
-const N8N_WEBHOOK = import.meta.env.VITE_N8N_WEBHOOK_URL
+const N8N_WEBHOOK            = import.meta.env.VITE_N8N_WEBHOOK_URL
+const N8N_DUPLICATES_WEBHOOK = import.meta.env.VITE_N8N_DUPLICATES_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 5 * 60 * 1000 // 5 minutes
 
 const TABLE_COLUMNS = [
   { key: 'id',               label: 'ID' },
+  { key: 'batch_id',         label: 'Batch ID' },
   { key: 'keyword',          label: 'Keyword' },
   { key: 'country',          label: 'Country' },
   { key: 'url',              label: 'URL' },
@@ -21,7 +24,56 @@ const TABLE_COLUMNS = [
   { key: 'lead_type',        label: 'Lead Type' },
   { key: 'remarks',          label: 'Remarks' },
   { key: 's_tag_id',         label: 'S-Tag' },
+  { key: 'timestamp',        label: 'Timestamp' },
 ]
+
+// batchModal.phase: 'loading' | 'select'
+function BatchSelectModal({ batchModal, onSelectChange, onConfirm, onCancel }) {
+  if (!batchModal) return null
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+
+        {batchModal.phase === 'loading' && (
+          <>
+            <div className="modal-icon modal-icon--loading">
+              <span className="spinner" />
+            </div>
+            <h2 className="modal-title">Loading Batches...</h2>
+          </>
+        )}
+
+        {batchModal.phase === 'select' && (
+          <>
+            <h2 className="modal-title">Check for Duplicates</h2>
+            <p className="modal-message">Select the batch ID you want to run duplicate checking for.</p>
+            <select
+              className="select-batch"
+              value={batchModal.selected}
+              onChange={(e) => onSelectChange(e.target.value)}
+            >
+              <option value="" disabled>Select Batch ID</option>
+              {batchModal.batchIds.map((id) => (
+                <option key={id} value={id}>{id}</option>
+              ))}
+            </select>
+            <div className="modal-actions">
+              <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
+              <button
+                className="modal-close-btn"
+                disabled={!batchModal.selected}
+                onClick={() => onConfirm(batchModal.selected)}
+              >
+                Run
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // modal.phase: 'loading' | 'success' | 'error'
 function Modal({ modal, onClose }) {
@@ -86,10 +138,12 @@ function App() {
   const [keyword, setKeyword] = useState('')
   const [country, setCountry] = useState('')
   const [search, setSearch]   = useState('')
-  const [leads, setLeads]     = useState([])
-  const [loading, setLoading] = useState(false)
-  const [modal, setModal]     = useState(null)
-  const pollRef               = useRef(null)
+  const [leads, setLeads]         = useState([])
+  const [tableLoading, setTableLoading] = useState(true)
+  const [loading, setLoading]     = useState(false)
+  const [modal, setModal]         = useState(null)
+  const [batchModal, setBatchModal] = useState(null)
+  const pollRef                   = useRef(null)
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -122,6 +176,20 @@ function App() {
       }
     }, POLL_INTERVAL_MS)
   }
+
+  // Fetch table data from Supabase on mount
+  useEffect(() => {
+    const fetchLeads = async () => {
+      setTableLoading(true)
+      const { data, error } = await supabase
+        .from('google_lead_gen_table')
+        .select('*')
+        .order('id', { ascending: false })
+      if (!error) setLeads(data ?? [])
+      setTableLoading(false)
+    }
+    fetchLeads()
+  }, [])
 
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [])
@@ -165,6 +233,64 @@ function App() {
     setModal(null)
   }
 
+  const handleCheckDuplicatesClick = async () => {
+    setBatchModal({ phase: 'loading' })
+
+    const { data, error } = await supabase
+      .from('google_lead_gen_table')
+      .select('batch_id')
+      .not('batch_id', 'is', null)
+      .order('batch_id', { ascending: false })
+
+    if (error) {
+      setBatchModal(null)
+      setModal({ phase: 'error', data: { message: 'Failed to load batch IDs.' } })
+      return
+    }
+
+    const batchIds = [...new Set(data.map((r) => r.batch_id).filter(Boolean))]
+
+    if (batchIds.length === 0) {
+      setBatchModal(null)
+      setModal({ phase: 'error', data: { message: 'No batches found in the database.' } })
+      return
+    }
+
+    setBatchModal({ phase: 'select', batchIds, selected: batchIds[0] })
+  }
+
+  const handleBatchConfirm = async (batchId) => {
+    setBatchModal(null)
+    setModal({ phase: 'loading' })
+    setLoading(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('google_lead_gen_table')
+        .select('id, url, domain')
+        .eq('batch_id', batchId)
+
+      if (error) throw new Error('Failed to fetch records for the selected batch.')
+
+      const payload = data.map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+
+      await fetch('/api/status', { method: 'DELETE' })
+
+      const res = await fetch(N8N_DUPLICATES_WEBHOOK, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error(`Webhook responded with status ${res.status}`)
+
+      startPolling()
+    } catch (err) {
+      setModal({ phase: 'error', data: { message: err.message } })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="container">
       <h1 className="title">Google Lead Gen</h1>
@@ -206,6 +332,16 @@ function App() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </form>
+
+        <div className="action-bar">
+          <button className="btn-action" disabled>Check for Affiliates</button>
+          <span className="action-sep">›</span>
+          <button className="btn-action" onClick={handleCheckDuplicatesClick} disabled={loading}>Check for Duplicates</button>
+          <span className="action-sep">›</span>
+          <button className="btn-action">Collect S-Tags</button>
+          <span className="action-sep">›</span>
+          <button className="btn-action">Collect Email &amp; Contact Info</button>
+        </div>
       </div>
 
       <div className="table-card">
@@ -219,7 +355,13 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {leads.length === 0 ? (
+              {tableLoading ? (
+                <tr>
+                  <td colSpan={TABLE_COLUMNS.length} className="no-data">
+                    Loading...
+                  </td>
+                </tr>
+              ) : leads.length === 0 ? (
                 <tr>
                   <td colSpan={TABLE_COLUMNS.length} className="no-data">
                     No data to display.
@@ -242,6 +384,13 @@ function App() {
       </div>
 
       <Modal modal={modal} onClose={handleModalClose} />
+
+      <BatchSelectModal
+        batchModal={batchModal}
+        onSelectChange={(val) => setBatchModal((prev) => ({ ...prev, selected: val }))}
+        onConfirm={handleBatchConfirm}
+        onCancel={() => setBatchModal(null)}
+      />
     </div>
   )
 }
