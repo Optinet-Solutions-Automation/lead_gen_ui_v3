@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
-const countries    = JSON.parse(import.meta.env.VITE_COUNTRIES)
-const N8N_WEBHOOK  = import.meta.env.VITE_N8N_WEBHOOK_URL
-const LISTENER_URL = import.meta.env.VITE_LISTENER_URL
+const countries   = JSON.parse(import.meta.env.VITE_COUNTRIES)
+const N8N_WEBHOOK = import.meta.env.VITE_N8N_WEBHOOK_URL
+
+const POLL_INTERVAL_MS = 2000
+const POLL_TIMEOUT_MS  = 5 * 60 * 1000 // 5 minutes
 
 const TABLE_COLUMNS = [
   { key: 'id',               label: 'ID' },
@@ -82,29 +84,42 @@ function App() {
   const [leads, setLeads]     = useState([])
   const [loading, setLoading] = useState(false)
   const [modal, setModal]     = useState(null)
-  const sseRef                = useRef(null)
+  const pollRef               = useRef(null)
 
-  // Connect to the SSE stream once on mount
-  useEffect(() => {
-    const es = new EventSource(`${LISTENER_URL}/events`)
-    sseRef.current = es
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
 
-    es.onmessage = (e) => {
+  const startPolling = () => {
+    const startTime = Date.now()
+
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - startTime > POLL_TIMEOUT_MS) {
+        stopPolling()
+        setModal({ phase: 'error', data: { message: 'Timed out waiting for the workflow to respond.' } })
+        return
+      }
+
       try {
-        const data = JSON.parse(e.data)
+        const res  = await fetch('/api/status')
+        const data = await res.json()
+
+        if (data.status === 'pending') return
+
+        stopPolling()
         const phase = data.status?.toLowerCase() === 'success' ? 'success' : 'error'
         setModal({ phase, data })
       } catch {
-        // ignore malformed messages
+        // network hiccup — keep polling
       }
-    }
+    }, POLL_INTERVAL_MS)
+  }
 
-    es.onerror = () => {
-      // silently retry — EventSource reconnects automatically
-    }
-
-    return () => es.close()
-  }, [])
+  // Clean up polling on unmount
+  useEffect(() => () => stopPolling(), [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -126,15 +141,20 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       })
-      if (!res.ok) {
-        throw new Error(`Webhook responded with status ${res.status}`)
-      }
-      // Modal stays in 'loading' until n8n calls back via SSE
+      if (!res.ok) throw new Error(`Webhook responded with status ${res.status}`)
+
+      // Start polling for the n8n callback
+      startPolling()
     } catch (err) {
       setModal({ phase: 'error', data: { message: err.message } })
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleModalClose = () => {
+    stopPolling()
+    setModal(null)
   }
 
   return (
@@ -213,7 +233,7 @@ function App() {
         </div>
       </div>
 
-      <Modal modal={modal} onClose={() => setModal(null)} />
+      <Modal modal={modal} onClose={handleModalClose} />
     </div>
   )
 }
