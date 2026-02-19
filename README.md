@@ -20,12 +20,21 @@ A Vite + React web app for generating and viewing Google search leads. Submits k
 
 ## How It Works
 
+### Submit (Lead Scraping)
 1. User enters a **Keyword** and selects a **Country**, then clicks **Submit**
-2. The app POSTs `{ keyword, countryValue, countryText }` to the n8n webhook
+2. The app POSTs `{ keyword, countryValue, countryText }` to the n8n scraping webhook
 3. A modal opens showing "Processing..." while the workflow runs
 4. n8n finishes and POSTs the result to `/api/webhook/status`
 5. The Vercel API route stores the result in Upstash Redis
 6. The frontend polls `/api/status` every 2 seconds and updates the modal with success or error
+
+### Check for Duplicates
+1. User clicks **Check for Duplicates** in the action bar
+2. The app fetches distinct `batch_id` values from Supabase and shows a batch selection modal
+3. User selects a batch ID and clicks **Run**
+4. The app fetches all records for that batch (`id`, `url`, `domain`) from Supabase
+5. The array is POSTed to the duplicates n8n webhook
+6. Same polling flow as Submit — modal updates with success or error
 
 ---
 
@@ -36,8 +45,9 @@ A Vite + React web app for generating and viewing Google search leads. Submits k
 │   ├── webhook/
 │   │   └── status.js       # POST — receives n8n callback, stores in Redis
 │   └── status.js           # GET  — polled by frontend for workflow result
+│                           # DELETE — clears stale Redis key before new submission
 ├── src/
-│   ├── App.jsx             # Main UI: search bar, table, modal
+│   ├── App.jsx             # Main UI: search bar, action bar, table, modals
 │   ├── App.css             # Styles
 │   ├── supabase.js         # Supabase client
 │   └── index.css           # Global styles
@@ -60,6 +70,7 @@ A Vite + React web app for generating and viewing Google search leads. Submits k
 | Column | Type |
 |---|---|
 | id | SERIAL PRIMARY KEY |
+| batch_id | TEXT |
 | keyword | TEXT |
 | country | TEXT |
 | url | TEXT |
@@ -72,6 +83,7 @@ A Vite + React web app for generating and viewing Google search leads. Submits k
 | lead_type | TEXT |
 | remarks | TEXT |
 | s_tag_id | INTEGER → s_tags_table |
+| timestamp | TIMESTAMPTZ |
 
 ---
 
@@ -84,6 +96,7 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 
 VITE_N8N_WEBHOOK_URL=
+VITE_N8N_DUPLICATES_WEBHOOK_URL=
 
 VITE_COUNTRIES=[{"id":"...","name":"..."}]
 
@@ -105,7 +118,7 @@ UPSTASH_REDIS_REST_TOKEN=
 
 ## n8n Integration
 
-### Outgoing webhook (app → n8n)
+### 1. Lead Scraping — Outgoing webhook (app → n8n)
 **URL:** value of `VITE_N8N_WEBHOOK_URL`
 **Method:** POST
 **Body:**
@@ -117,7 +130,18 @@ UPSTASH_REDIS_REST_TOKEN=
 }
 ```
 
-### Callback webhook (n8n → app)
+### 2. Check for Duplicates — Outgoing webhook (app → n8n)
+**URL:** value of `VITE_N8N_DUPLICATES_WEBHOOK_URL`
+**Method:** POST
+**Body:** Array of records for the selected batch:
+```json
+[
+  { "id": 1, "url": "https://example.com", "domain": "example.com" },
+  { "id": 2, "url": "https://other.com",   "domain": "other.com" }
+]
+```
+
+### 3. Callback webhook (n8n → app) — shared by all workflows
 **URL:** `https://lead-gen-ui-v3.vercel.app/api/webhook/status`
 **Method:** POST
 
@@ -138,6 +162,17 @@ UPSTASH_REDIS_REST_TOKEN=
   "timestamp": "{{ $json.error.timestamp }}"
 }
 ```
+
+---
+
+## Action Bar
+
+| Button | Status | Description |
+|---|---|---|
+| Check for Affiliates | Disabled | Not yet implemented |
+| Check for Duplicates | Active | Sends batch records to duplicates workflow |
+| Collect S-Tags | Active | Not yet wired |
+| Collect Email & Contact Info | Active | Not yet wired |
 
 ---
 
