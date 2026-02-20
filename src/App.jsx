@@ -6,6 +6,7 @@ const countries   = JSON.parse(import.meta.env.VITE_COUNTRIES)
 const N8N_WEBHOOK            = import.meta.env.VITE_N8N_WEBHOOK_URL
 const N8N_DUPLICATES_WEBHOOK = import.meta.env.VITE_N8N_DUPLICATES_WEBHOOK_URL
 const N8N_MONDAY_WEBHOOK     = import.meta.env.VITE_N8N_MONDAY_WEBHOOK_URL
+const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 5 * 60 * 1000 // 5 minutes
@@ -299,6 +300,20 @@ function App() {
     setBatchModal({ phase: 'select', batchIds, selected: batchIds[0] })
   }
 
+  const handleCollectSTagsClick = async () => {
+    if (selectedRows.size === 0) {
+      setModal({ phase: 'error', data: { message: 'Please select a row to collect S-Tags for.' } })
+      return
+    }
+    if (selectedRows.size > 1) {
+      setModal({ phase: 'error', data: { message: 'Collect S-Tags only works on one row at a time. Please select a single row.' } })
+      return
+    }
+    const row = leads.find((r) => selectedRows.has(r.id))
+    const payload = { id: row.id, url: row.url, domain: row.domain }
+    await sendToWebhook(N8N_STAGS_WEBHOOK, payload)
+  }
+
   const handleBatchActionClick = (webhookUrl) => async () => {
     if (selectedRows.size > 0) {
       const payload = leads
@@ -376,7 +391,7 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Duplicates</button>
           <span className="action-sep">›</span>
-          <button className="btn-action">Collect S-Tags</button>
+          <button className="btn-action" onClick={handleCollectSTagsClick} disabled={loading}>Collect S-Tags</button>
           <span className="action-sep">›</span>
           <button className="btn-action">Collect Email &amp; Contact Info</button>
           <span className="action-sep">›</span>
