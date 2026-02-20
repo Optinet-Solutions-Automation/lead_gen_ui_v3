@@ -5,6 +5,7 @@ import { supabase } from './supabase'
 const countries   = JSON.parse(import.meta.env.VITE_COUNTRIES)
 const N8N_WEBHOOK            = import.meta.env.VITE_N8N_WEBHOOK_URL
 const N8N_DUPLICATES_WEBHOOK = import.meta.env.VITE_N8N_DUPLICATES_WEBHOOK_URL
+const N8N_MONDAY_WEBHOOK     = import.meta.env.VITE_N8N_MONDAY_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 5 * 60 * 1000 // 5 minutes
@@ -142,8 +143,9 @@ function App() {
   const [selectedRows, setSelectedRows] = useState(new Set())
   const [tableLoading, setTableLoading] = useState(true)
   const [loading, setLoading]     = useState(false)
-  const [modal, setModal]         = useState(null)
-  const [batchModal, setBatchModal] = useState(null)
+  const [modal, setModal]                   = useState(null)
+  const [batchModal, setBatchModal]         = useState(null)
+  const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
   const pollRef                   = useRef(null)
 
   const stopPolling = () => {
@@ -189,11 +191,12 @@ function App() {
     setTableLoading(false)
   }
 
-  const allSelected  = leads.length > 0 && selectedRows.size === leads.length
+  const selectableLeads = leads.filter((r) => r.lead_type !== 'INVALID')
+  const allSelected  = selectableLeads.length > 0 && selectedRows.size === selectableLeads.length
   const someSelected = selectedRows.size > 0 && !allSelected
 
   const toggleSelectAll = () => {
-    setSelectedRows(allSelected ? new Set() : new Set(leads.map((r) => r.id)))
+    setSelectedRows(allSelected ? new Set() : new Set(selectableLeads.map((r) => r.id)))
   }
 
   const toggleRow = (id) => {
@@ -250,12 +253,12 @@ function App() {
     setModal(null)
   }
 
-  const sendDuplicatesWebhook = async (payload) => {
+  const sendToWebhook = async (url, payload) => {
     setModal({ phase: 'loading' })
     setLoading(true)
     try {
       await fetch('/api/status', { method: 'DELETE' })
-      const res = await fetch(N8N_DUPLICATES_WEBHOOK, {
+      const res = await fetch(url, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
@@ -269,17 +272,8 @@ function App() {
     }
   }
 
-  const handleCheckDuplicatesClick = async () => {
-    // If rows are checked, use them directly — skip batch selection
-    if (selectedRows.size > 0) {
-      const payload = leads
-        .filter((r) => selectedRows.has(r.id))
-        .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
-      await sendDuplicatesWebhook(payload)
-      return
-    }
-
-    // No rows checked — ask user to pick a batch ID
+  const openBatchModal = async (webhookUrl) => {
+    setPendingWebhookUrl(webhookUrl)
     setBatchModal({ phase: 'loading' })
 
     const { data, error } = await supabase
@@ -305,12 +299,23 @@ function App() {
     setBatchModal({ phase: 'select', batchIds, selected: batchIds[0] })
   }
 
+  const handleBatchActionClick = (webhookUrl) => async () => {
+    if (selectedRows.size > 0) {
+      const payload = leads
+        .filter((r) => selectedRows.has(r.id) && r.lead_type !== 'INVALID')
+        .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+      await sendToWebhook(webhookUrl, payload)
+      return
+    }
+    await openBatchModal(webhookUrl)
+  }
+
   const handleBatchConfirm = async (batchId) => {
     setBatchModal(null)
 
     const { data, error } = await supabase
       .from('google_lead_gen_table')
-      .select('id, url, domain')
+      .select('id, url, domain, lead_type')
       .eq('batch_id', batchId)
 
     if (error) {
@@ -318,8 +323,10 @@ function App() {
       return
     }
 
-    const payload = data.map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
-    await sendDuplicatesWebhook(payload)
+    const payload = data
+      .filter((r) => r.lead_type !== 'INVALID')
+      .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+    await sendToWebhook(pendingWebhookUrl, payload)
   }
 
   return (
@@ -367,11 +374,13 @@ function App() {
         <div className="action-bar">
           <button className="btn-action" disabled>Check for Affiliates</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleCheckDuplicatesClick} disabled={loading}>Check for Duplicates</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Duplicates</button>
           <span className="action-sep">›</span>
           <button className="btn-action">Collect S-Tags</button>
           <span className="action-sep">›</span>
           <button className="btn-action">Collect Email &amp; Contact Info</button>
+          <span className="action-sep">›</span>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_MONDAY_WEBHOOK)} disabled={loading}>Add Lead on Monday.com</button>
         </div>
       </div>
 
@@ -408,12 +417,13 @@ function App() {
                 </tr>
               ) : (
                 leads.map((row) => (
-                  <tr key={row.id} className={selectedRows.has(row.id) ? 'row-selected' : ''}>
+                  <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', row.lead_type === 'INVALID' ? 'row-invalid' : ''].filter(Boolean).join(' ')}>
                     <td className="col-checkbox">
                       <input
                         type="checkbox"
                         checked={selectedRows.has(row.id)}
                         onChange={() => toggleRow(row.id)}
+                        disabled={row.lead_type === 'INVALID'}
                       />
                     </td>
                     {TABLE_COLUMNS.map((col) => {

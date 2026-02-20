@@ -223,6 +223,11 @@
   background-color: #f5f8fb;
 }
 
+.leads-table tbody tr.row-invalid td {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+
 .leads-table tbody tr.row-selected {
   background-color: #e8f0f7;
 }
