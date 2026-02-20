@@ -228,6 +228,15 @@
   color: #9ca3af;
 }
 
+.leads-table tbody tr.row-lead td {
+  color: #166534;
+  background-color: #f0fdf4;
+}
+
+.leads-table tbody tr.row-lead:hover td {
+  background-color: #dcfce7;
+}
+
 .leads-table tbody tr.row-selected {
   background-color: #e8f0f7;
 }

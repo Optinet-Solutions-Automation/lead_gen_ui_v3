@@ -417,7 +417,7 @@ function App() {
                 </tr>
               ) : (
                 leads.map((row) => (
-                  <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', row.lead_type === 'INVALID' ? 'row-invalid' : ''].filter(Boolean).join(' ')}>
+                  <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', row.lead_type === 'INVALID' ? 'row-invalid' : '', row.lead_type === 'LEAD' ? 'row-lead' : ''].filter(Boolean).join(' ')}>
                     <td className="col-checkbox">
                       <input
                         type="checkbox"
