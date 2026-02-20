@@ -223,6 +223,27 @@
   background-color: #f5f8fb;
 }
 
+.leads-table tbody tr.row-selected {
+  background-color: #e8f0f7;
+}
+
+.leads-table .col-checkbox {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  padding: 0.75rem 0;
+  text-align: center;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.leads-table .col-checkbox input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: #1e4d6b;
+}
+
 .leads-table td {
   padding: 0.75rem 1.25rem;
   color: #374151;

@@ -139,6 +139,7 @@ function App() {
   const [country, setCountry] = useState('')
   const [search, setSearch]   = useState('')
   const [leads, setLeads]         = useState([])
+  const [selectedRows, setSelectedRows] = useState(new Set())
   const [tableLoading, setTableLoading] = useState(true)
   const [loading, setLoading]     = useState(false)
   const [modal, setModal]         = useState(null)
@@ -179,12 +180,28 @@ function App() {
 
   const fetchLeads = async () => {
     setTableLoading(true)
+    setSelectedRows(new Set())
     const { data, error } = await supabase
       .from('google_lead_gen_table')
       .select('*')
       .order('id', { ascending: false })
     if (!error) setLeads(data ?? [])
     setTableLoading(false)
+  }
+
+  const allSelected  = leads.length > 0 && selectedRows.size === leads.length
+  const someSelected = selectedRows.size > 0 && !allSelected
+
+  const toggleSelectAll = () => {
+    setSelectedRows(allSelected ? new Set() : new Set(leads.map((r) => r.id)))
+  }
+
+  const toggleRow = (id) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   // Fetch table data from Supabase on mount
@@ -233,7 +250,36 @@ function App() {
     setModal(null)
   }
 
+  const sendDuplicatesWebhook = async (payload) => {
+    setModal({ phase: 'loading' })
+    setLoading(true)
+    try {
+      await fetch('/api/status', { method: 'DELETE' })
+      const res = await fetch(N8N_DUPLICATES_WEBHOOK, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      })
+      if (!res.ok) throw new Error(`Webhook responded with status ${res.status}`)
+      startPolling()
+    } catch (err) {
+      setModal({ phase: 'error', data: { message: err.message } })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleCheckDuplicatesClick = async () => {
+    // If rows are checked, use them directly — skip batch selection
+    if (selectedRows.size > 0) {
+      const payload = leads
+        .filter((r) => selectedRows.has(r.id))
+        .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+      await sendDuplicatesWebhook(payload)
+      return
+    }
+
+    // No rows checked — ask user to pick a batch ID
     setBatchModal({ phase: 'loading' })
 
     const { data, error } = await supabase
@@ -261,34 +307,19 @@ function App() {
 
   const handleBatchConfirm = async (batchId) => {
     setBatchModal(null)
-    setModal({ phase: 'loading' })
-    setLoading(true)
 
-    try {
-      const { data, error } = await supabase
-        .from('google_lead_gen_table')
-        .select('id, url, domain')
-        .eq('batch_id', batchId)
+    const { data, error } = await supabase
+      .from('google_lead_gen_table')
+      .select('id, url, domain')
+      .eq('batch_id', batchId)
 
-      if (error) throw new Error('Failed to fetch records for the selected batch.')
-
-      const payload = data.map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
-
-      await fetch('/api/status', { method: 'DELETE' })
-
-      const res = await fetch(N8N_DUPLICATES_WEBHOOK, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      })
-      if (!res.ok) throw new Error(`Webhook responded with status ${res.status}`)
-
-      startPolling()
-    } catch (err) {
-      setModal({ phase: 'error', data: { message: err.message } })
-    } finally {
-      setLoading(false)
+    if (error) {
+      setModal({ phase: 'error', data: { message: 'Failed to fetch records for the selected batch.' } })
+      return
     }
+
+    const payload = data.map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+    await sendDuplicatesWebhook(payload)
   }
 
   return (
@@ -349,6 +380,14 @@ function App() {
           <table className="leads-table">
             <thead>
               <tr>
+                <th className="col-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected }}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 {TABLE_COLUMNS.map((col) => (
                   <th key={col.key}>{col.label}</th>
                 ))}
@@ -357,19 +396,26 @@ function App() {
             <tbody>
               {tableLoading ? (
                 <tr>
-                  <td colSpan={TABLE_COLUMNS.length} className="no-data">
+                  <td colSpan={TABLE_COLUMNS.length + 1} className="no-data">
                     Loading...
                   </td>
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={TABLE_COLUMNS.length} className="no-data">
+                  <td colSpan={TABLE_COLUMNS.length + 1} className="no-data">
                     No data to display.
                   </td>
                 </tr>
               ) : (
                 leads.map((row) => (
-                  <tr key={row.id}>
+                  <tr key={row.id} className={selectedRows.has(row.id) ? 'row-selected' : ''}>
+                    <td className="col-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(row.id)}
+                        onChange={() => toggleRow(row.id)}
+                      />
+                    </td>
                     {TABLE_COLUMNS.map((col) => {
                       const value = row[col.key] ?? '—'
                       const className = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : undefined
