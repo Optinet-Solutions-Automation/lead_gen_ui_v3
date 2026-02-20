@@ -446,7 +446,7 @@ function App() {
                       const className = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : undefined
                       return (
                         <td key={col.key} className={className} title={String(value)}>
-                          {col.key === 'url' && row[col.key] ? (
+                          {(col.key === 'url' || col.key === 'domain') && row[col.key] ? (
                             <a href={row[col.key]} target="_blank" rel="noreferrer" className="cell-link">
                               {row[col.key]}
                             </a>
