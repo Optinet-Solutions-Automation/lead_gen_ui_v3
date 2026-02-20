@@ -16,7 +16,7 @@ const TABLE_COLUMNS = [
   { key: 'batch_id',         label: 'Batch ID' },
   { key: 'keyword',          label: 'Keyword' },
   { key: 'country',          label: 'Country' },
-  { key: 'url',              label: 'URL' },
+  { key: 'url',              label: 'Full URL' },
   { key: 'domain',           label: 'Clean Domain' },
   { key: 'position_on_page', label: 'Position on Page' },
   { key: 'page_number',      label: 'Page #' },
@@ -446,7 +446,11 @@ function App() {
                       const className = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : undefined
                       return (
                         <td key={col.key} className={className} title={String(value)}>
-                          {value}
+                          {col.key === 'url' && row[col.key] ? (
+                            <a href={row[col.key]} target="_blank" rel="noreferrer" className="cell-link">
+                              {row[col.key]}
+                            </a>
+                          ) : value}
                         </td>
                       )
                     })}

@@ -258,6 +258,16 @@
   accent-color: #1e4d6b;
 }
 
+.cell-link {
+  color: #1e4d6b;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cell-link:hover {
+  color: #17405a;
+}
+
 .leads-table td {
   padding: 0.75rem 1.25rem;
   color: #374151;
