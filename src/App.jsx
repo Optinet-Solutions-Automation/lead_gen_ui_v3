@@ -22,8 +22,9 @@ const TABLE_COLUMNS = [
   { key: 'position_on_page', label: 'Position on Page' },
   { key: 'page_number',      label: 'Page #' },
   { key: 'overall_position', label: 'Overall Position' },
-  { key: 'result_type',      label: 'Result Type' },
-  { key: 'affiliate_name',   label: 'Affiliate Name' },
+  { key: 'result_type',        label: 'Result Type' },
+  { key: 'is_rooster_partner', label: 'Rooster Partner' },
+  { key: 'affiliate_name',     label: 'Affiliate Name' },
   { key: 'lead_type',        label: 'Lead Type' },
   { key: 'remarks',          label: 'Remarks' },
   { key: 's_tag_id',         label: 'S-Tag' },
@@ -341,7 +342,7 @@ function App() {
       return
     }
     const row = leads.find((r) => selectedRows.has(r.id))
-    const payload = { id: row.id, url: row.url, domain: row.domain }
+    const payload = { id: row.id, url: row.url, domain: row.domain, is_rooster_partner: row.is_rooster_partner ?? null }
     await sendToWebhook(N8N_STAGS_WEBHOOK, payload)
   }
 
