@@ -445,6 +445,32 @@
   background-color: #17405a;
 }
 
+/* ── Password Modal ──────────────────────────────────── */
+.input-password {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  color: #333;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-password:focus {
+  border-color: #1e4d6b;
+  box-shadow: 0 0 0 3px rgba(30, 77, 107, 0.1);
+}
+
+.password-error {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #dc2626;
+  text-align: center;
+}
+
 /* ── Batch Select Modal ───────────────────────────────── */
 .select-batch {
   width: 100%;

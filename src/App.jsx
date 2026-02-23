@@ -6,6 +6,7 @@ const countries   = JSON.parse(import.meta.env.VITE_COUNTRIES)
 const N8N_WEBHOOK            = import.meta.env.VITE_N8N_WEBHOOK_URL
 const N8N_DUPLICATES_WEBHOOK = import.meta.env.VITE_N8N_DUPLICATES_WEBHOOK_URL
 const N8N_MONDAY_WEBHOOK     = import.meta.env.VITE_N8N_MONDAY_WEBHOOK_URL
+const MONDAY_PASSWORD        = import.meta.env.VITE_MONDAY_PASSWORD
 const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
@@ -28,6 +29,35 @@ const TABLE_COLUMNS = [
   { key: 's_tag_id',         label: 'S-Tag' },
   { key: 'timestamp',        label: 'Timestamp' },
 ]
+
+function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel }) {
+  if (!passwordModal) return null
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2 className="modal-title">Enter Password</h2>
+        <p className="modal-message">This action is password protected.</p>
+        <input
+          type="password"
+          className="input-password"
+          placeholder="Password"
+          value={passwordModal.input}
+          onChange={(e) => onPasswordChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onConfirm()}
+          autoFocus
+        />
+        {passwordModal.error && (
+          <p className="password-error">{passwordModal.error}</p>
+        )}
+        <div className="modal-actions">
+          <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="modal-close-btn" onClick={onConfirm}>Confirm</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // batchModal.phase: 'loading' | 'select'
 function BatchSelectModal({ batchModal, onSelectChange, onConfirm, onCancel }) {
@@ -147,6 +177,7 @@ function App() {
   const [modal, setModal]                   = useState(null)
   const [batchModal, setBatchModal]         = useState(null)
   const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
+  const [passwordModal, setPasswordModal] = useState(null)
   const pollRef                   = useRef(null)
 
   const stopPolling = () => {
@@ -325,6 +356,19 @@ function App() {
     await openBatchModal(webhookUrl)
   }
 
+  const handleMondayClick = () => {
+    setPasswordModal({ input: '', error: '' })
+  }
+
+  const handlePasswordConfirm = () => {
+    if (passwordModal.input !== MONDAY_PASSWORD) {
+      setPasswordModal((prev) => ({ ...prev, error: 'Incorrect password. Please try again.' }))
+      return
+    }
+    setPasswordModal(null)
+    handleBatchActionClick(N8N_MONDAY_WEBHOOK)()
+  }
+
   const handleBatchConfirm = async (batchId) => {
     setBatchModal(null)
 
@@ -395,7 +439,7 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action">Collect Email &amp; Contact Info</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleBatchActionClick(N8N_MONDAY_WEBHOOK)} disabled={loading}>Add Lead on Monday.com</button>
+          <button className="btn-action" onClick={handleMondayClick} disabled={loading}>Add Lead on Monday.com</button>
         </div>
       </div>
 
@@ -463,6 +507,13 @@ function App() {
       </div>
 
       <Modal modal={modal} onClose={handleModalClose} />
+
+      <PasswordModal
+        passwordModal={passwordModal}
+        onPasswordChange={(val) => setPasswordModal((prev) => ({ ...prev, input: val, error: '' }))}
+        onConfirm={handlePasswordConfirm}
+        onCancel={() => setPasswordModal(null)}
+      />
 
       <BatchSelectModal
         batchModal={batchModal}
