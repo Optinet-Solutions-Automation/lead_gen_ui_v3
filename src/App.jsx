@@ -79,8 +79,8 @@ function BatchSelectModal({ batchModal, onSelectChange, onConfirm, onCancel }) {
 
         {batchModal.phase === 'select' && (
           <>
-            <h2 className="modal-title">Check for Duplicates</h2>
-            <p className="modal-message">Select the batch ID you want to run duplicate checking for.</p>
+            <h2 className="modal-title">Check for Domain Duplicates</h2>
+            <p className="modal-message">Select the batch ID you want to run domain duplicate checking for.</p>
             <select
               className="select-batch"
               value={batchModal.selected}
@@ -434,7 +434,7 @@ function App() {
         <div className="action-bar">
           <button className="btn-action" disabled>Check for Affiliates</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Duplicates</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Domain Duplicates</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleCollectSTagsClick} disabled={loading}>Collect S-Tags</button>
           <span className="action-sep">›</span>
