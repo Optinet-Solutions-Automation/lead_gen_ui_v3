@@ -60,6 +60,47 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
   )
 }
 
+function STagsModal({ sTagsModal, onClose }) {
+  if (!sTagsModal) return null
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+        <h2 className="modal-title">S-Tags List</h2>
+        {sTagsModal.loading ? (
+          <div className="modal-icon modal-icon--loading"><span className="spinner" /></div>
+        ) : (
+          <div className="stags-table-wrapper">
+            <table className="stags-table">
+              <thead>
+                <tr>
+                  <th>S-Tag ID</th>
+                  <th>S-Tag</th>
+                  <th>Brand</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sTagsModal.sTags.length === 0 ? (
+                  <tr><td colSpan={3} className="no-data">No S-Tags found.</td></tr>
+                ) : (
+                  sTagsModal.sTags.map((tag) => (
+                    <tr key={tag.s_tag_id} className={tag.s_tag_id === sTagsModal.highlightId ? 'stag-row--highlight' : ''}>
+                      <td>{tag.s_tag_id}</td>
+                      <td>{tag.s_tag ?? '—'}</td>
+                      <td>{tag.brand ?? '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <button className="modal-close-btn" onClick={onClose}>Close</button>
+      </div>
+    </div>
+  )
+}
+
 // batchModal.phase: 'loading' | 'select'
 function BatchSelectModal({ batchModal, onSelectChange, onConfirm, onCancel }) {
   if (!batchModal) return null
@@ -179,6 +220,7 @@ function App() {
   const [batchModal, setBatchModal]         = useState(null)
   const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
   const [passwordModal, setPasswordModal] = useState(null)
+  const [sTagsModal, setSTagsModal] = useState(null)
   const pollRef                   = useRef(null)
 
   const stopPolling = () => {
@@ -357,6 +399,20 @@ function App() {
     await openBatchModal(webhookUrl)
   }
 
+  const handleSTagClick = async (sTagId) => {
+    setSTagsModal({ loading: true, sTags: [], highlightId: sTagId })
+    const { data, error } = await supabase
+      .from('s_tags_table')
+      .select('s_tag_id, s_tag, brand')
+      .order('s_tag_id', { ascending: true })
+    if (error) {
+      setSTagsModal(null)
+      setModal({ phase: 'error', data: { message: 'Failed to load S-Tags.' } })
+      return
+    }
+    setSTagsModal({ loading: false, sTags: data ?? [], highlightId: sTagId })
+  }
+
   const handleMondayClick = () => {
     setPasswordModal({ input: '', error: '' })
   }
@@ -495,6 +551,10 @@ function App() {
                             <a href={row[col.key]} target="_blank" rel="noreferrer" className="cell-link">
                               {row[col.key]}
                             </a>
+                          ) : col.key === 's_tag_id' && row[col.key] ? (
+                            <button className="cell-link cell-link--btn" onClick={() => handleSTagClick(row[col.key])}>
+                              Click here
+                            </button>
                           ) : value}
                         </td>
                       )
@@ -508,6 +568,8 @@ function App() {
       </div>
 
       <Modal modal={modal} onClose={handleModalClose} />
+
+      <STagsModal sTagsModal={sTagsModal} onClose={() => setSTagsModal(null)} />
 
       <PasswordModal
         passwordModal={passwordModal}
