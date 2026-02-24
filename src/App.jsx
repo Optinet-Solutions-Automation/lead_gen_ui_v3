@@ -84,7 +84,7 @@ function STagsModal({ sTagsModal, onClose }) {
                   <tr><td colSpan={3} className="no-data">No S-Tags found.</td></tr>
                 ) : (
                   sTagsModal.sTags.map((tag) => (
-                    <tr key={tag.s_tag_id} className={tag.s_tag_id === sTagsModal.highlightId ? 'stag-row--highlight' : ''}>
+                    <tr key={tag.s_tag_id}>
                       <td>{tag.s_tag_id}</td>
                       <td>{tag.s_tag ?? '—'}</td>
                       <td>{tag.brand ?? '—'}</td>
@@ -404,10 +404,10 @@ function App() {
     const { data, error } = await supabase
       .from('s_tags_table')
       .select('s_tag_id, s_tag, brand')
-      .order('s_tag_id', { ascending: true })
+      .eq('s_tag_id', sTagId)
     if (error) {
       setSTagsModal(null)
-      setModal({ phase: 'error', data: { message: 'Failed to load S-Tags.' } })
+      setModal({ phase: 'error', data: { message: 'Failed to load S-Tag.' } })
       return
     }
     setSTagsModal({ loading: false, sTags: data ?? [], highlightId: sTagId })
