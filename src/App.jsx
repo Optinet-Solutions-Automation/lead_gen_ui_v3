@@ -546,7 +546,10 @@ function App() {
                       />
                     </td>
                     {TABLE_COLUMNS.map((col) => {
-                      const value = row[col.key] ?? '—'
+                      const raw = row[col.key]
+                      const value = col.key === 'is_rooster_partner'
+                        ? (raw === true || raw === 'true' ? 'Yes' : raw === false || raw === 'false' ? 'No' : '—')
+                        : (raw ?? '—')
                       const className = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : undefined
                       return (
                         <td key={col.key} className={className} title={String(value)}>
