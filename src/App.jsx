@@ -8,6 +8,7 @@ const N8N_DUPLICATES_WEBHOOK = import.meta.env.VITE_N8N_DUPLICATES_WEBHOOK_URL
 const N8N_MONDAY_WEBHOOK     = import.meta.env.VITE_N8N_MONDAY_WEBHOOK_URL
 const MONDAY_PASSWORD        = import.meta.env.VITE_MONDAY_PASSWORD
 const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
+const N8N_ROOSTER_WEBHOOK    = import.meta.env.VITE_N8N_ROOSTER_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 5 * 60 * 1000 // 5 minutes
@@ -491,6 +492,8 @@ function App() {
           <button className="btn-action" disabled>Check for Affiliates</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Domain Duplicates</button>
+          <span className="action-sep">›</span>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK)} disabled={loading}>Check if Rooster Partner</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleCollectSTagsClick} disabled={loading}>Collect S-Tags</button>
           <span className="action-sep">›</span>
