@@ -289,6 +289,15 @@
   text-overflow: unset;
 }
 
+/* Timestamp column — fixed width, no truncation */
+.leads-table td.col-timestamp {
+  min-width: 160px;
+  max-width: 160px;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: nowrap;
+}
+
 /* Remarks column — wraps sentence-length text */
 .leads-table td.col-remarks {
   white-space: normal;

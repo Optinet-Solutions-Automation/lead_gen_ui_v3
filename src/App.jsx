@@ -29,7 +29,7 @@ const TABLE_COLUMNS = [
   { key: 'lead_type',        label: 'Lead Type' },
   { key: 'remarks',          label: 'Remarks' },
   { key: 's_tag_id',         label: 'S-Tag' },
-  { key: 'timestamp',        label: 'Timestamp' },
+  { key: 'time_stamp',        label: 'Timestamp' },
 ]
 
 function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel }) {
@@ -547,10 +547,20 @@ function App() {
                     </td>
                     {TABLE_COLUMNS.map((col) => {
                       const raw = row[col.key]
-                      const value = col.key === 'is_rooster_partner'
-                        ? (raw === true || raw === 'true' ? 'Yes' : raw === false || raw === 'false' ? 'No' : '—')
-                        : (raw ?? '—')
-                      const className = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : undefined
+                      let value
+                      if (col.key === 'is_rooster_partner') {
+                        value = raw === true || raw === 'true' ? 'Yes' : raw === false || raw === 'false' ? 'No' : '—'
+                      } else if (col.key === 'time_stamp') {
+                        if (raw) {
+                          const d = new Date(raw)
+                          value = isNaN(d.getTime()) ? String(raw) : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+                        } else {
+                          value = '—'
+                        }
+                      } else {
+                        value = raw ?? '—'
+                      }
+                      const className = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'time_stamp' ? 'col-timestamp' : undefined
                       return (
                         <td key={col.key} className={className} title={String(value)}>
                           {(col.key === 'url' || col.key === 'domain') && row[col.key] ? (
