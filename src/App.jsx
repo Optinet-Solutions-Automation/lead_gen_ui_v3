@@ -64,10 +64,15 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
 function STagsModal({ sTagsModal, onClose }) {
   if (!sTagsModal) return null
 
+  const roosterLabel =
+    sTagsModal.isRoosterPartner === true  || sTagsModal.isRoosterPartner === 'true'  ? 'Yes' :
+    sTagsModal.isRoosterPartner === false || sTagsModal.isRoosterPartner === 'false' ? 'No'  : '—'
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
         <h2 className="modal-title">S-Tags List</h2>
+        <p className="modal-message">Rooster Partner: <strong>{roosterLabel}</strong></p>
         {sTagsModal.loading ? (
           <div className="modal-icon modal-icon--loading"><span className="spinner" /></div>
         ) : (
@@ -400,8 +405,8 @@ function App() {
     await openBatchModal(webhookUrl)
   }
 
-  const handleSTagClick = async (sTagId) => {
-    setSTagsModal({ loading: true, sTags: [], highlightId: sTagId })
+  const handleSTagClick = async (sTagId, isRoosterPartner) => {
+    setSTagsModal({ loading: true, sTags: [], highlightId: sTagId, isRoosterPartner })
     const { data, error } = await supabase
       .from('s_tags_table')
       .select('s_tag_id, s_tag, brand')
@@ -411,7 +416,7 @@ function App() {
       setModal({ phase: 'error', data: { message: 'Failed to load S-Tag.' } })
       return
     }
-    setSTagsModal({ loading: false, sTags: data ?? [], highlightId: sTagId })
+    setSTagsModal({ loading: false, sTags: data ?? [], highlightId: sTagId, isRoosterPartner })
   }
 
   const handleMondayClick = () => {
@@ -568,7 +573,7 @@ function App() {
                               {row[col.key]}
                             </a>
                           ) : col.key === 's_tag_id' && row[col.key] ? (
-                            <button className="cell-link cell-link--btn" onClick={() => handleSTagClick(row[col.key])}>
+                            <button className="cell-link cell-link--btn" onClick={() => handleSTagClick(row[col.key], row.is_rooster_partner)}>
                               Click here
                             </button>
                           ) : value}
