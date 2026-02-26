@@ -9,6 +9,7 @@ const N8N_MONDAY_WEBHOOK     = import.meta.env.VITE_N8N_MONDAY_WEBHOOK_URL
 const MONDAY_PASSWORD        = import.meta.env.VITE_MONDAY_PASSWORD
 const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
 const N8N_ROOSTER_WEBHOOK    = import.meta.env.VITE_N8N_ROOSTER_WEBHOOK_URL
+const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 5 * 60 * 1000 // 5 minutes
@@ -394,6 +395,24 @@ function App() {
     await sendToWebhook(N8N_STAGS_WEBHOOK, payload)
   }
 
+  const handleProcessPPCClick = async () => {
+    if (selectedRows.size === 0) {
+      setModal({ phase: 'error', data: { message: 'Please select a row to process PPC for.' } })
+      return
+    }
+    if (selectedRows.size > 1) {
+      setModal({ phase: 'error', data: { message: 'Process PPC only works on one row at a time. Please select a single row.' } })
+      return
+    }
+    const row = leads.find((r) => selectedRows.has(r.id))
+    if (row.result_type !== 'PPC') {
+      setModal({ phase: 'error', data: { message: 'The selected row must have a Result Type of PPC.' } })
+      return
+    }
+    const payload = { id: row.id, url: row.url, domain: row.domain, is_rooster_partner: row.is_rooster_partner ?? null }
+    await sendToWebhook(N8N_PPC_WEBHOOK, payload)
+  }
+
   const handleBatchActionClick = (webhookUrl) => async () => {
     if (selectedRows.size > 0) {
       const payload = leads
@@ -505,6 +524,9 @@ function App() {
           <button className="btn-action">Collect Email &amp; Contact Info</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleMondayClick} disabled={loading}>Add Lead on Monday.com</button>
+        </div>
+        <div className="action-bar">
+          <button className="btn-action" onClick={handleProcessPPCClick} disabled={loading}>Process PPC</button>
         </div>
       </div>
 
