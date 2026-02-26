@@ -526,7 +526,7 @@ function App() {
           <button className="btn-action" onClick={handleMondayClick} disabled={loading}>Add Lead on Monday.com</button>
         </div>
         <div className="action-bar">
-          <button className="btn-action" onClick={handleProcessPPCClick} disabled={loading}>Process PPC</button>
+          <button className="btn-action" onClick={handleProcessPPCClick} disabled={loading}>PPC - Take Screenshot</button>
         </div>
       </div>
 
