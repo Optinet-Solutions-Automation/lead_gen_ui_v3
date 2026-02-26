@@ -226,6 +226,7 @@ function App() {
   const [modal, setModal]                   = useState(null)
   const [batchModal, setBatchModal]         = useState(null)
   const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
+  const [pendingExtraFields, setPendingExtraFields] = useState([])
   const [passwordModal, setPasswordModal] = useState(null)
   const [sTagsModal, setSTagsModal] = useState(null)
   const pollRef                   = useRef(null)
@@ -354,8 +355,9 @@ function App() {
     }
   }
 
-  const openBatchModal = async (webhookUrl) => {
+  const openBatchModal = async (webhookUrl, extraFields = []) => {
     setPendingWebhookUrl(webhookUrl)
+    setPendingExtraFields(extraFields)
     setBatchModal({ phase: 'loading' })
 
     const { data, error } = await supabase
@@ -413,15 +415,19 @@ function App() {
     await sendToWebhook(N8N_PPC_WEBHOOK, payload)
   }
 
-  const handleBatchActionClick = (webhookUrl) => async () => {
+  const handleBatchActionClick = (webhookUrl, extraFields = []) => async () => {
     if (selectedRows.size > 0) {
       const payload = leads
         .filter((r) => selectedRows.has(r.id) && r.lead_type !== 'INVALID')
-        .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+        .map((r) => {
+          const base = { id: r.id, url: r.url, domain: r.domain }
+          extraFields.forEach((f) => { base[f] = r[f] ?? null })
+          return base
+        })
       await sendToWebhook(webhookUrl, payload)
       return
     }
-    await openBatchModal(webhookUrl)
+    await openBatchModal(webhookUrl, extraFields)
   }
 
   const handleSTagClick = async (sTagId, isRoosterPartner) => {
@@ -454,9 +460,10 @@ function App() {
   const handleBatchConfirm = async (batchId) => {
     setBatchModal(null)
 
+    const selectFields = ['id', 'url', 'domain', 'lead_type', ...pendingExtraFields].join(', ')
     const { data, error } = await supabase
       .from('google_lead_gen_table')
-      .select('id, url, domain, lead_type')
+      .select(selectFields)
       .eq('batch_id', batchId)
 
     if (error) {
@@ -466,7 +473,11 @@ function App() {
 
     const payload = data
       .filter((r) => r.lead_type !== 'INVALID')
-      .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+      .map((r) => {
+        const base = { id: r.id, url: r.url, domain: r.domain }
+        pendingExtraFields.forEach((f) => { base[f] = r[f] ?? null })
+        return base
+      })
     await sendToWebhook(pendingWebhookUrl, payload)
   }
 
@@ -517,7 +528,7 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Domain Duplicates</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK)} disabled={loading}>Check if Rooster Partner</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if Rooster Partner</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleCollectSTagsClick} disabled={loading}>Collect S-Tags</button>
           <span className="action-sep">›</span>
