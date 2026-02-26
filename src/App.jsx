@@ -391,7 +391,7 @@ function App() {
       return
     }
     const row = leads.find((r) => selectedRows.has(r.id))
-    const payload = { id: row.id, url: row.url, domain: row.domain, is_rooster_partner: row.is_rooster_partner ?? null }
+    const payload = { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }
     await sendToWebhook(N8N_STAGS_WEBHOOK, payload)
   }
 
