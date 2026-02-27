@@ -12,7 +12,7 @@ const N8N_ROOSTER_WEBHOOK    = import.meta.env.VITE_N8N_ROOSTER_WEBHOOK_URL
 const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
-const POLL_TIMEOUT_MS  = 5 * 60 * 1000 // 5 minutes
+const POLL_TIMEOUT_MS  = 10 * 60 * 1000 // 10 minutes
 
 const TABLE_COLUMNS = [
   { key: 'id',               label: 'ID' },
@@ -94,7 +94,6 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
   )
 }
 
-const STAG_EDITABLE = ['s_tag', 'brand']
 
 function STagsModal({ sTagsModal, onClose, onCellSave, onAddMore }) {
   const [editingCell, setEditingCell] = useState(null) // { rowId (s_tag_id), colKey, value }
