@@ -316,6 +316,101 @@
   font-size: 0.9rem;
 }
 
+/* ── Table hint ──────────────────────────────────────── */
+.table-hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid #f0f2f5;
+  margin: 0;
+}
+
+/* ── Editable cells ──────────────────────────────────── */
+td.cell--editable {
+  cursor: pointer;
+}
+
+td.cell--editable:hover {
+  background-color: #eff6ff;
+  outline: 1px dashed #93c5fd;
+  outline-offset: -1px;
+}
+
+td.cell--editing {
+  overflow: visible;
+  position: relative;
+  z-index: 10;
+}
+
+.cell-edit-input,
+.cell-edit-select {
+  width: 100%;
+  min-width: 180px;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: #1a2e44;
+  background: #ffffff;
+  border: 2px solid #1e4d6b;
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* ── Add S-Tag cell hint ─────────────────────────────── */
+.cell-add-stag {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  cursor: pointer;
+  font-style: italic;
+}
+
+.cell-add-stag:hover {
+  color: #1e4d6b;
+  text-decoration: underline;
+}
+
+/* ── Add S-Tags modal buttons ────────────────────────── */
+.btn-add-row {
+  display: inline-block;
+  margin-top: 0.75rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #1e4d6b;
+  background: #ffffff;
+  border: 1px solid #1e4d6b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.btn-add-row:hover {
+  background-color: #1e4d6b;
+  color: #ffffff;
+}
+
+.btn-remove-row {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.btn-remove-row:hover {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.field-required {
+  color: #dc2626;
+  font-weight: 700;
+}
+
 /* ── S-Tags cell link button ─────────────────────────── */
 .cell-link--btn {
   background: none;
@@ -523,6 +618,11 @@
 
 .modal-close-btn:hover {
   background-color: #17405a;
+}
+
+.modal-close-btn:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
 }
 
 /* ── Password Modal ──────────────────────────────────── */
