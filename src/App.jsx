@@ -96,7 +96,7 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
 
 const STAG_EDITABLE = ['s_tag', 'brand']
 
-function STagsModal({ sTagsModal, onClose, onCellSave }) {
+function STagsModal({ sTagsModal, onClose, onCellSave, onAddMore }) {
   const [editingCell, setEditingCell] = useState(null) // { rowId (s_tag_id), colKey, value }
   const isCancellingEditRef = useRef(false)
 
@@ -181,7 +181,10 @@ function STagsModal({ sTagsModal, onClose, onCellSave }) {
             </table>
           </div>
         )}
-        <button className="modal-close-btn" onClick={onClose}>Close</button>
+        <div className="modal-actions">
+          <button className="btn-modal-cancel" onClick={onAddMore}>+ Add S-Tag</button>
+          <button className="modal-close-btn" onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
   )
@@ -251,7 +254,7 @@ function AddSTagsModal({ addSTagsModal, onSave, onCancel }) {
         <button className="btn-add-row" onClick={addRow}>+ Add another</button>
         <div className="modal-actions">
           <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="modal-close-btn" disabled={!canSave} onClick={() => onSave(addSTagsModal.rowId, rows)}>Save</button>
+          <button className="modal-close-btn" disabled={!canSave} onClick={() => onSave(addSTagsModal.rowId, rows, addSTagsModal.existingSTagId)}>Save</button>
         </div>
       </div>
     </div>
@@ -615,33 +618,40 @@ function App() {
     }
   }
 
-  const handleAddSTagsSave = async (rowId, sTags) => {
-    // Get the current max s_tag_id to determine the next sequential ID
-    const { data: maxData, error: maxError } = await supabase
-      .from('s_tags_table')
-      .select('s_tag_id')
-      .order('s_tag_id', { ascending: false })
-      .limit(1)
+  const handleAddSTagsSave = async (rowId, sTags, existingSTagId) => {
+    let newSTagId
 
-    if (maxError) {
-      setModal({ phase: 'error', data: { message: 'Failed to determine next S-Tag ID.' } })
-      return
+    if (existingSTagId != null) {
+      // Adding more rows to an existing s_tag_id — no new ID needed
+      newSTagId = existingSTagId
+    } else {
+      // Get the current max s_tag_id to determine the next sequential ID
+      const { data: maxData, error: maxError } = await supabase
+        .from('s_tags_table')
+        .select('s_tag_id')
+        .order('s_tag_id', { ascending: false })
+        .limit(1)
+
+      if (maxError) {
+        setModal({ phase: 'error', data: { message: 'Failed to determine next S-Tag ID.' } })
+        return
+      }
+
+      newSTagId = parseInt(maxData?.[0]?.s_tag_id ?? 0, 10) + 1
+
+      // Update the main table row with the new s_tag_id
+      const { error: updateError } = await supabase
+        .from('google_lead_gen_table')
+        .update({ s_tag_id: newSTagId })
+        .eq('id', rowId)
+
+      if (updateError) {
+        setModal({ phase: 'error', data: { message: 'Failed to update row with new S-Tag ID.' } })
+        return
+      }
     }
 
-    const newSTagId = parseInt(maxData?.[0]?.s_tag_id ?? 0, 10) + 1
-
-    // Update the main table row with the new s_tag_id
-    const { error: updateError } = await supabase
-      .from('google_lead_gen_table')
-      .update({ s_tag_id: newSTagId })
-      .eq('id', rowId)
-
-    if (updateError) {
-      setModal({ phase: 'error', data: { message: 'Failed to update row with new S-Tag ID.' } })
-      return
-    }
-
-    // Insert the s-tag rows with the same new s_tag_id
+    // Insert the s-tag rows
     const { error: insertError } = await supabase
       .from('s_tags_table')
       .insert(sTags.map((t) => ({ s_tag_id: newSTagId, s_tag: t.s_tag, brand: t.brand })))
@@ -652,11 +662,23 @@ function App() {
     }
 
     setAddSTagsModal(null)
-    setLeads((prev) => prev.map((r) => r.id === rowId ? { ...r, s_tag_id: newSTagId } : r))
+
+    if (existingSTagId != null) {
+      // Refresh the S-Tags modal with the updated rows
+      const { data: refreshData } = await supabase
+        .from('s_tags_table')
+        .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
+        .eq('s_tag_id', existingSTagId)
+      setSTagsModal((prev) => ({ ...prev, sTags: refreshData ?? [] }))
+    } else {
+      setLeads((prev) => prev.map((r) => r.id === rowId ? { ...r, s_tag_id: newSTagId } : r))
+    }
+
+    setModal({ phase: 'success', data: { message: 'S-Tags saved successfully.' } })
   }
 
-  const handleSTagClick = async (sTagId, isRoosterPartner) => {
-    setSTagsModal({ loading: true, sTags: [], highlightId: sTagId, isRoosterPartner })
+  const handleSTagClick = async (sTagId, isRoosterPartner, domain) => {
+    setSTagsModal({ loading: true, sTags: [], highlightId: sTagId, isRoosterPartner, domain })
     const { data, error } = await supabase
       .from('s_tags_table')
       .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
@@ -666,7 +688,7 @@ function App() {
       setModal({ phase: 'error', data: { message: 'Failed to load S-Tag.' } })
       return
     }
-    setSTagsModal({ loading: false, sTags: data ?? [], highlightId: sTagId, isRoosterPartner })
+    setSTagsModal({ loading: false, sTags: data ?? [], highlightId: sTagId, isRoosterPartner, domain })
   }
 
   const handleMondayClick = () => {
@@ -874,7 +896,7 @@ function App() {
                               {row[col.key]}
                             </a>
                           ) : col.key === 's_tag_id' && row[col.key] ? (
-                            <button className="cell-link cell-link--btn" onClick={() => handleSTagClick(row[col.key], row.is_rooster_partner)}>
+                            <button className="cell-link cell-link--btn" onClick={() => handleSTagClick(row[col.key], row.is_rooster_partner, row.domain)}>
                               Click here
                             </button>
                           ) : col.key === 's_tag_id' && !row[col.key] ? (
@@ -893,11 +915,16 @@ function App() {
         </div>
       </div>
 
-      <Modal modal={modal} onClose={handleModalClose} />
-
-      <STagsModal sTagsModal={sTagsModal} onClose={() => setSTagsModal(null)} onCellSave={handleSTagCellSave} />
+      <STagsModal
+        sTagsModal={sTagsModal}
+        onClose={() => setSTagsModal(null)}
+        onCellSave={handleSTagCellSave}
+        onAddMore={() => setAddSTagsModal({ existingSTagId: sTagsModal.highlightId, domain: sTagsModal.domain })}
+      />
 
       <AddSTagsModal addSTagsModal={addSTagsModal} onSave={handleAddSTagsSave} onCancel={() => setAddSTagsModal(null)} />
+
+      <Modal modal={modal} onClose={handleModalClose} />
 
       <PasswordModal
         passwordModal={passwordModal}
