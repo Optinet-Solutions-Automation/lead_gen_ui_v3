@@ -228,6 +228,22 @@
   color: #9ca3af;
 }
 
+.leads-table tbody tr.row-invalid td .result-type-badge,
+.leads-table tbody tr.row-invalid td .stag-indicator,
+.leads-table tbody tr.row-invalid td .country-cell {
+  text-decoration: line-through;
+}
+
+.leads-table tbody tr.row-invalid td .country-cell img {
+  opacity: 0.35;
+}
+
+.country-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .leads-table tbody tr.row-lead td {
   color: #166534;
   background-color: #f0fdf4;
@@ -717,13 +733,32 @@ td.cell--editing {
   background-color: #e9f0f5;
 }
 
-/* ── S-Tag indicator column ──────────────────────────── */
-.leads-table .col-stag {
-  width: 56px;
-  min-width: 56px;
+/* ── Indicator columns (S-Tag, Rooster Partner, Contact) */
+.leads-table .col-stag,
+.leads-table .col-rooster,
+.leads-table .col-contact {
+  width: 64px;
+  min-width: 64px;
   text-align: center;
 }
 
+/* ── Result Type badges ──────────────────────────────── */
+.result-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.result-type--ppc     { background-color: #fff7ed; color: #c2410c; }
+.result-type--organic { background-color: #f0fdf4; color: #15803d; }
+.result-type--other   { background-color: #f3f4f6; color: #6b7280; }
+
+/* ── Stag / indicator ────────────────────────────────── */
 .stag-indicator {
   display: inline-block;
   font-size: 0.95rem;
@@ -731,8 +766,9 @@ td.cell--editing {
   line-height: 1;
 }
 
-.stag-indicator--yes { color: #16a34a; }
-.stag-indicator--no  { color: #dc2626; }
+.stag-indicator--yes     { color: #16a34a; }
+.stag-indicator--no      { color: #dc2626; }
+.stag-indicator--unknown { color: #9ca3af; }
 
 /* ── Profile Modal ───────────────────────────────────── */
 .modal--profile {

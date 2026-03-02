@@ -15,22 +15,19 @@ const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 10 * 60 * 1000 // 10 minutes
 
 const TABLE_COLUMNS = [
-  { key: 'id',               label: 'ID' },
-  { key: 'batch_id',         label: 'Batch ID' },
-  { key: 'keyword',          label: 'Keyword' },
-  { key: 'country',          label: 'Country' },
-  { key: 'url',              label: 'Full URL' },
-  { key: 'domain',           label: 'Clean Domain' },
-  { key: 's_tag_id',         label: 'S-Tag' },
-  { key: 'position_on_page', label: 'Position on Page' },
-  { key: 'page_number',      label: 'Page #' },
-  { key: 'overall_position', label: 'Overall Position' },
+  { key: 'id',                 label: 'ID' },
+  { key: 'batch_id',           label: 'Batch ID' },
+  { key: 'keyword',            label: 'Keyword' },
+  { key: 'country',            label: 'Country' },
+  { key: 'url',                label: 'Full URL' },
+  { key: 'domain',             label: 'Clean Domain' },
   { key: 'result_type',        label: 'Result Type' },
   { key: 'is_rooster_partner', label: 'Rooster Partner' },
+  { key: 's_tag_id',           label: 'S-Tag' },
+  { key: 'contact_id',         label: 'Contact' },
   { key: 'affiliate_name',     label: 'Affiliate Name' },
-  { key: 'status',           label: 'Status' },
-  { key: 'remarks',          label: 'Remarks' },
-  { key: 'time_stamp',        label: 'Timestamp' },
+  { key: 'status',             label: 'Status' },
+  { key: 'remarks',            label: 'Remarks' },
 ]
 
 const EDITABLE_COLS = {
@@ -55,6 +52,15 @@ const EDITABLE_COLS = {
 
 const isInvalid = (status) => status === 'INVALID' || status === 'Invalid'
 const isLead    = (status) => status === 'LEAD'    || status === 'Lead'
+
+
+const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+
+const resolveCountryCode = (raw) => {
+  if (!raw) return null
+  if (raw.length === 2) return raw.toUpperCase()
+  return countries.find((c) => c.name === raw)?.code ?? null
+}
 
 const getInitialEditValue = (colKey, raw) => {
   const conf = EDITABLE_COLS[colKey]
@@ -95,28 +101,57 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
 }
 
 
+const CONTACT_TYPE_OPTIONS = ['Email', 'Phone', 'LinkedIn', 'Website']
+
 function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags }) {
-  const [sTags, setSTags]               = useState([])
-  const [sTagsLoading, setSTagsLoading] = useState(false)
-  const [editingCell, setEditingCell]   = useState(null)
-  const [newRows, setNewRows]           = useState([])
-  const isCancellingEditRef             = useRef(false)
+  const [sTags, setSTags]                           = useState([])
+  const [sTagsLoading, setSTagsLoading]             = useState(false)
+  const [editingCell, setEditingCell]               = useState(null)
+  const [newRows, setNewRows]                       = useState([])
+  const isCancellingEditRef                         = useRef(false)
+
+  const [contacts, setContacts]                     = useState([])
+  const [contactsLoading, setContactsLoading]       = useState(false)
+  const [editingContactCell, setEditingContactCell] = useState(null)
+  const [newContactRows, setNewContactRows]         = useState([])
+  const isCancellingContactEditRef                  = useRef(false)
 
   useEffect(() => {
     if (!profileModal) return
     setEditingCell(null)
     setNewRows([])
-    if (!profileModal.s_tag_id) { setSTags([]); return }
-    setSTagsLoading(true)
-    supabase
-      .from('s_tags_table')
-      .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
-      .eq('s_tag_id', profileModal.s_tag_id)
-      .then(({ data, error }) => {
-        setSTagsLoading(false)
-        if (error) { onError('Failed to load S-Tags.'); return }
-        setSTags(data ?? [])
-      })
+    setEditingContactCell(null)
+    setNewContactRows([])
+
+    if (profileModal.s_tag_id) {
+      setSTagsLoading(true)
+      supabase
+        .from('s_tags_table')
+        .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
+        .eq('s_tag_id', profileModal.s_tag_id)
+        .then(({ data, error }) => {
+          setSTagsLoading(false)
+          if (error) { onError('Failed to load S-Tags.'); return }
+          setSTags(data ?? [])
+        })
+    } else {
+      setSTags([])
+    }
+
+    if (profileModal.contact_id) {
+      setContactsLoading(true)
+      supabase
+        .from('contact_table')
+        .select('contact_autoinc_id, contact_id, contact_detail, contact_type')
+        .eq('contact_id', profileModal.contact_id)
+        .then(({ data, error }) => {
+          setContactsLoading(false)
+          if (error) { onError('Failed to load contacts.'); return }
+          setContacts(data ?? [])
+        })
+    } else {
+      setContacts([])
+    }
   }, [profileModal?.id])
 
   if (!profileModal) return null
@@ -136,6 +171,80 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
   }
 
   const cancelCellEdit = () => { isCancellingEditRef.current = true; setEditingCell(null) }
+
+  // ── contact cell edit helpers ──────────────────────────
+  const commitContactCellEdit = async () => {
+    if (isCancellingContactEditRef.current) { isCancellingContactEditRef.current = false; return }
+    if (!editingContactCell) return
+    const { rowId, colKey, value } = editingContactCell
+    if (colKey === 'contact_detail') {
+      const contact = contacts.find((c) => c.contact_autoinc_id === rowId)
+      if (contact?.contact_type === 'Email' && !isValidEmail(value.trim())) {
+        onError('Please enter a valid email address.')
+        cancelContactCellEdit()
+        return
+      }
+    }
+    setEditingContactCell(null)
+    setContacts((prev) => prev.map((c) => c.contact_autoinc_id === rowId ? { ...c, [colKey]: value } : c))
+    const { error } = await supabase
+      .from('contact_table').update({ [colKey]: value }).eq('contact_autoinc_id', rowId)
+    if (error) onError('Failed to save contact changes.')
+  }
+
+  const cancelContactCellEdit = () => { isCancellingContactEditRef.current = true; setEditingContactCell(null) }
+
+  // ── contact delete helper ──────────────────────────────
+  const handleDeleteContact = async (autoIncId) => {
+    const { error } = await supabase
+      .from('contact_table')
+      .delete()
+      .eq('contact_autoinc_id', autoIncId)
+    if (error) { onError('Failed to delete contact.'); return }
+
+    const updated = contacts.filter((c) => c.contact_autoinc_id !== autoIncId)
+    setContacts(updated)
+
+    if (updated.length === 0) {
+      const { error: updateError } = await supabase
+        .from('google_lead_gen_table')
+        .update({ contact_id: null })
+        .eq('id', row.id)
+      if (!updateError) onLeadUpdate(row.id, { contact_id: null })
+    }
+  }
+
+  // ── contact new-row helpers ────────────────────────────
+  const canSaveNewContacts = newContactRows.length > 0 && newContactRows.every((r) => {
+    if (!r.contact_detail.trim() || !r.contact_type) return false
+    if (r.contact_type === 'Email' && !isValidEmail(r.contact_detail.trim())) return false
+    return true
+  })
+
+  const handleSaveNewContactRows = async () => {
+    let contactId = row.contact_id
+
+    if (!contactId) {
+      const { data: maxData, error: maxError } = await supabase
+        .from('contact_table').select('contact_id').order('contact_id', { ascending: false }).limit(1)
+      if (maxError) { onError('Failed to determine next contact ID.'); return }
+      contactId = parseInt(maxData?.[0]?.contact_id ?? 0, 10) + 1
+      const { error: updateError } = await supabase
+        .from('google_lead_gen_table').update({ contact_id: contactId }).eq('id', row.id)
+      if (updateError) { onError('Failed to update row with new contact ID.'); return }
+      onLeadUpdate(row.id, { contact_id: contactId })
+    }
+
+    const { error: insertError } = await supabase
+      .from('contact_table')
+      .insert(newContactRows.map((r) => ({ contact_id: contactId, contact_detail: r.contact_detail, contact_type: r.contact_type })))
+    if (insertError) { onError('Failed to insert contacts.'); return }
+
+    const { data: refreshData } = await supabase
+      .from('contact_table').select('contact_autoinc_id, contact_id, contact_detail, contact_type').eq('contact_id', contactId)
+    setContacts(refreshData ?? [])
+    setNewContactRows([])
+  }
 
   // ── delete helper ──────────────────────────────────────
   const handleDeleteSTag = async (autoIncId) => {
@@ -348,6 +457,133 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           </div>
         </div>
 
+        <hr className="profile-divider" />
+
+        {/* ── Contacts section ── */}
+        <div className="profile-section">
+          <div className="profile-section-header">
+            <h3 className="profile-section-title">Contacts</h3>
+            <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
+          </div>
+
+          {contactsLoading ? (
+            <div className="modal-icon modal-icon--loading" style={{ margin: '0.75rem auto' }}><span className="spinner" /></div>
+          ) : (
+            <div className="stags-table-wrapper">
+              <table className="stags-table">
+                <thead>
+                  <tr>
+                    <th>Contact ID</th>
+                    <th>Type <span className="field-required">*</span></th>
+                    <th>Detail <span className="field-required">*</span></th>
+                    <th style={{ width: '32px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.length === 0 && newContactRows.length === 0 ? (
+                    <tr><td colSpan={4} className="no-data">No contacts yet.</td></tr>
+                  ) : (
+                    <>
+                      {contacts.map((contact) => (
+                        <tr key={contact.contact_autoinc_id}>
+                          <td>{contact.contact_id}</td>
+                          {['contact_type', 'contact_detail'].map((colKey) => {
+                            const isEditing = editingContactCell?.rowId === contact.contact_autoinc_id && editingContactCell?.colKey === colKey
+                            return (
+                              <td
+                                key={colKey}
+                                className={isEditing ? 'cell--editing' : 'cell--editable'}
+                                onDoubleClick={!isEditing ? () => setEditingContactCell({ rowId: contact.contact_autoinc_id, colKey, value: contact[colKey] ?? '' }) : undefined}
+                              >
+                                {isEditing ? (
+                                  colKey === 'contact_type' ? (
+                                    <select
+                                      className="cell-edit-select"
+                                      value={editingContactCell.value}
+                                      autoFocus
+                                      onChange={(e) => setEditingContactCell((prev) => ({ ...prev, value: e.target.value }))}
+                                      onBlur={commitContactCellEdit}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter')  e.currentTarget.blur()
+                                        if (e.key === 'Escape') cancelContactCellEdit()
+                                      }}
+                                    >
+                                      <option value="">Select type</option>
+                                      {CONTACT_TYPE_OPTIONS.map((opt) => (
+                                        <option key={opt} value={opt}>{opt}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      className="cell-edit-input"
+                                      type="text"
+                                      value={editingContactCell.value}
+                                      autoFocus
+                                      onChange={(e) => setEditingContactCell((prev) => ({ ...prev, value: e.target.value }))}
+                                      onBlur={commitContactCellEdit}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter')  e.currentTarget.blur()
+                                        if (e.key === 'Escape') cancelContactCellEdit()
+                                        if (e.key === 'Tab')    { e.preventDefault(); commitContactCellEdit() }
+                                      }}
+                                    />
+                                  )
+                                ) : (contact[colKey] ?? '—')}
+                              </td>
+                            )
+                          })}
+                          <td>
+                            <button className="btn-remove-row" title="Delete contact" onClick={() => handleDeleteContact(contact.contact_autoinc_id)}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                      {newContactRows.map((nr, i) => (
+                        <tr key={`new-contact-${i}`}>
+                          <td className="profile-value" style={{ color: '#9ca3af' }}>—</td>
+                          <td>
+                            <select
+                              className="cell-edit-input"
+                              value={nr.contact_type}
+                              onChange={(e) => setNewContactRows((prev) => prev.map((r, idx) => idx === i ? { ...r, contact_type: e.target.value } : r))}
+                            >
+                              <option value="">Select type</option>
+                              {CONTACT_TYPE_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              className="cell-edit-input"
+                              type="text"
+                              value={nr.contact_detail}
+                              placeholder="Contact detail"
+                              onChange={(e) => setNewContactRows((prev) => prev.map((r, idx) => idx === i ? { ...r, contact_detail: e.target.value } : r))}
+                            />
+                          </td>
+                          <td>
+                            <button className="btn-remove-row" onClick={() => setNewContactRows((prev) => prev.filter((_, idx) => idx !== i))}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="profile-stags-actions">
+            <button className="btn-add-row" onClick={() => setNewContactRows((prev) => [...prev, { contact_detail: '', contact_type: '' }])}>+ Add Contact</button>
+            {newContactRows.length > 0 && (
+              <div className="modal-actions" style={{ marginTop: '0.5rem' }}>
+                <button className="btn-modal-cancel" onClick={() => setNewContactRows([])}>Cancel</button>
+                <button className="modal-close-btn" disabled={!canSaveNewContacts} onClick={handleSaveNewContactRows} style={{ marginTop: 0 }}>Save</button>
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   )
@@ -520,7 +756,17 @@ function App() {
     setTableLoading(false)
   }
 
-  const selectableLeads = leads.filter((r) => !isInvalid(r.status))
+  const searchTerm = search.trim()
+  const SEARCH_EXCLUDE_KEYS = new Set(['is_rooster_partner', 's_tag_id', 'contact_id', 'remarks'])
+  const filteredLeads = searchTerm.length >= 3
+    ? leads.filter((row) =>
+        Object.entries(row).some(([key, val]) =>
+          !SEARCH_EXCLUDE_KEYS.has(key) && val != null && String(val).toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      )
+    : leads
+
+  const selectableLeads = filteredLeads.filter((r) => !isInvalid(r.status))
   const allSelected  = selectableLeads.length > 0 && selectedRows.size === selectableLeads.length
   const someSelected = selectedRows.size > 0 && !allSelected
 
@@ -723,7 +969,7 @@ function App() {
       <h1 className="title">Google Lead Gen</h1>
 
       <div className="search-card">
-        <form className="search-bar" onSubmit={handleSubmit}>
+        <form className="search-bar" onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}>
           <input
             type="text"
             className="input-keyword"
@@ -792,7 +1038,7 @@ function App() {
                 </th>
                 <th className="col-view"></th>
                 {TABLE_COLUMNS.map((col) => (
-                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : undefined}>{col.label}</th>
+                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined}>{col.label}</th>
                 ))}
               </tr>
             </thead>
@@ -803,14 +1049,14 @@ function App() {
                     Loading...
                   </td>
                 </tr>
-              ) : leads.length === 0 ? (
+              ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td colSpan={TABLE_COLUMNS.length + 1} className="no-data">
-                    No data to display.
+                    {searchTerm.length >= 3 ? `No results for "${searchTerm}".` : 'No data to display.'}
                   </td>
                 </tr>
               ) : (
-                leads.map((row) => (
+                filteredLeads.map((row) => (
                   <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', isInvalid(row.status) ? 'row-invalid' : '', isLead(row.status) ? 'row-lead' : ''].filter(Boolean).join(' ')}>
                     <td className="col-checkbox">
                       <input
@@ -847,15 +1093,15 @@ function App() {
                         value = raw ?? '—'
                       }
 
-                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'time_stamp' ? 'col-timestamp' : col.key === 's_tag_id' ? 'col-stag' : undefined
-                      const className = [baseClass, isEditing ? 'cell--editing' : editConf ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
+                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined
+                      const className = [baseClass, isEditing ? 'cell--editing' : (editConf && !isInvalid(row.status)) ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
 
                       return (
                         <td
                           key={col.key}
                           className={className}
                           title={isEditing ? undefined : String(value)}
-                          onDoubleClick={editConf && !isEditing ? () => setEditingCell({ rowId: row.id, colKey: col.key, value: getInitialEditValue(col.key, raw) }) : undefined}
+                          onDoubleClick={editConf && !isEditing && !isInvalid(row.status) ? () => setEditingCell({ rowId: row.id, colKey: col.key, value: getInitialEditValue(col.key, raw) }) : undefined}
                         >
                           {isEditing ? (
                             editConf.type === 'dropdown' ? (
@@ -893,7 +1139,43 @@ function App() {
                                 }}
                               />
                             )
+                          ) : col.key === 'country' ? (
+                            (() => {
+                              const code = resolveCountryCode(raw)
+                              return code
+                                ? <span className="country-cell" title={raw}>
+                                    <img src={`https://flagcdn.com/20x15/${code.toLowerCase()}.png`} alt={code} />
+                                    {code}
+                                  </span>
+                                : (raw ? <span>{raw}</span> : '—')
+                            })()
+                          ) : col.key === 'result_type' ? (
+                            <span className={`result-type-badge ${raw === 'PPC' ? 'result-type--ppc' : raw === 'Organic' ? 'result-type--organic' : 'result-type--other'}`} title={raw ?? '—'}>
+                              {raw === 'PPC' ? (
+                                <>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                  PPC
+                                </>
+                              ) : raw === 'Organic' ? (
+                                <>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+                                  Organic
+                                </>
+                              ) : (raw ?? '—')}
+                            </span>
+                          ) : col.key === 'is_rooster_partner' ? (
+                            <span className={
+                              (raw === true || raw === 'true')  ? 'stag-indicator stag-indicator--yes' :
+                              (raw === false || raw === 'false') ? 'stag-indicator stag-indicator--no' :
+                              'stag-indicator stag-indicator--unknown'
+                            }>
+                              {(raw === true || raw === 'true') ? '✓' : (raw === false || raw === 'false') ? '✗' : '?'}
+                            </span>
                           ) : col.key === 's_tag_id' ? (
+                            <span className={row[col.key] ? 'stag-indicator stag-indicator--yes' : 'stag-indicator stag-indicator--no'}>
+                              {row[col.key] ? '✓' : '✗'}
+                            </span>
+                          ) : col.key === 'contact_id' ? (
                             <span className={row[col.key] ? 'stag-indicator stag-indicator--yes' : 'stag-indicator stag-indicator--no'}>
                               {row[col.key] ? '✓' : '✗'}
                             </span>
