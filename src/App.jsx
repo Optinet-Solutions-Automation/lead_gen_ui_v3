@@ -21,6 +21,7 @@ const TABLE_COLUMNS = [
   { key: 'country',          label: 'Country' },
   { key: 'url',              label: 'Full URL' },
   { key: 'domain',           label: 'Clean Domain' },
+  { key: 's_tag_id',         label: 'S-Tag' },
   { key: 'position_on_page', label: 'Position on Page' },
   { key: 'page_number',      label: 'Page #' },
   { key: 'overall_position', label: 'Overall Position' },
@@ -29,7 +30,6 @@ const TABLE_COLUMNS = [
   { key: 'affiliate_name',     label: 'Affiliate Name' },
   { key: 'status',           label: 'Status' },
   { key: 'remarks',          label: 'Remarks' },
-  { key: 's_tag_id',         label: 'S-Tag' },
   { key: 'time_stamp',        label: 'Timestamp' },
 ]
 
@@ -95,166 +95,259 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
 }
 
 
-function STagsModal({ sTagsModal, onClose, onCellSave, onAddMore }) {
-  const [editingCell, setEditingCell] = useState(null) // { rowId (s_tag_id), colKey, value }
-  const isCancellingEditRef = useRef(false)
+function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags }) {
+  const [sTags, setSTags]               = useState([])
+  const [sTagsLoading, setSTagsLoading] = useState(false)
+  const [editingCell, setEditingCell]   = useState(null)
+  const [newRows, setNewRows]           = useState([])
+  const isCancellingEditRef             = useRef(false)
 
-  if (!sTagsModal) return null
+  useEffect(() => {
+    if (!profileModal) return
+    setEditingCell(null)
+    setNewRows([])
+    if (!profileModal.s_tag_id) { setSTags([]); return }
+    setSTagsLoading(true)
+    supabase
+      .from('s_tags_table')
+      .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
+      .eq('s_tag_id', profileModal.s_tag_id)
+      .then(({ data, error }) => {
+        setSTagsLoading(false)
+        if (error) { onError('Failed to load S-Tags.'); return }
+        setSTags(data ?? [])
+      })
+  }, [profileModal?.id])
 
-  const roosterLabel =
-    sTagsModal.isRoosterPartner === true  || sTagsModal.isRoosterPartner === 'true'  ? 'Yes' :
-    sTagsModal.isRoosterPartner === false || sTagsModal.isRoosterPartner === 'false' ? 'No'  : '—'
+  if (!profileModal) return null
 
-  const commitCellEdit = () => {
-    if (isCancellingEditRef.current) {
-      isCancellingEditRef.current = false
-      return
-    }
+  const row = profileModal
+
+  // ── cell edit helpers ──────────────────────────────────
+  const commitCellEdit = async () => {
+    if (isCancellingEditRef.current) { isCancellingEditRef.current = false; return }
     if (!editingCell) return
     const { rowId, colKey, value } = editingCell
     setEditingCell(null)
-    onCellSave(rowId, colKey, value)
+    setSTags((prev) => prev.map((t) => t.s_tag_autoinc_id === rowId ? { ...t, [colKey]: value } : t))
+    const { error } = await supabase
+      .from('s_tags_table').update({ [colKey]: value }).eq('s_tag_autoinc_id', rowId)
+    if (error) onError('Failed to save S-Tag changes.')
   }
 
-  const cancelCellEdit = () => {
-    isCancellingEditRef.current = true
-    setEditingCell(null)
+  const cancelCellEdit = () => { isCancellingEditRef.current = true; setEditingCell(null) }
+
+  // ── delete helper ──────────────────────────────────────
+  const handleDeleteSTag = async (autoIncId) => {
+    const { error } = await supabase
+      .from('s_tags_table')
+      .delete()
+      .eq('s_tag_autoinc_id', autoIncId)
+    if (error) { onError('Failed to delete S-Tag.'); return }
+
+    const updated = sTags.filter((t) => t.s_tag_autoinc_id !== autoIncId)
+    setSTags(updated)
+
+    if (updated.length === 0) {
+      const { error: updateError } = await supabase
+        .from('google_lead_gen_table')
+        .update({ s_tag_id: null })
+        .eq('id', row.id)
+      if (!updateError) onLeadUpdate(row.id, { s_tag_id: null })
+    }
   }
+
+  // ── new-row helpers ────────────────────────────────────
+  const canSaveNew = newRows.length > 0 && newRows.every((r) => r.s_tag.trim() && r.brand.trim())
+
+  const handleSaveNewRows = async () => {
+    let sTagId = row.s_tag_id
+
+    if (!sTagId) {
+      const { data: maxData, error: maxError } = await supabase
+        .from('s_tags_table').select('s_tag_id').order('s_tag_id', { ascending: false }).limit(1)
+      if (maxError) { onError('Failed to determine next S-Tag ID.'); return }
+      sTagId = parseInt(maxData?.[0]?.s_tag_id ?? 0, 10) + 1
+      const { error: updateError } = await supabase
+        .from('google_lead_gen_table').update({ s_tag_id: sTagId }).eq('id', row.id)
+      if (updateError) { onError('Failed to update row with new S-Tag ID.'); return }
+      onLeadUpdate(row.id, { s_tag_id: sTagId })
+    }
+
+    const { error: insertError } = await supabase
+      .from('s_tags_table')
+      .insert(newRows.map((r) => ({ s_tag_id: sTagId, s_tag: r.s_tag, brand: r.brand })))
+    if (insertError) { onError('Failed to insert S-Tags.'); return }
+
+    const { data: refreshData } = await supabase
+      .from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand').eq('s_tag_id', sTagId)
+    setSTags(refreshData ?? [])
+    setNewRows([])
+  }
+
+  // ── display helpers ────────────────────────────────────
+  const roosterLabel =
+    row.is_rooster_partner === true  || row.is_rooster_partner === 'true'  ? 'Yes' :
+    row.is_rooster_partner === false || row.is_rooster_partner === 'false' ? 'No'  : '—'
+
+  let timestampLabel = '—'
+  if (row.time_stamp) {
+    const d = new Date(row.time_stamp)
+    timestampLabel = isNaN(d.getTime()) ? String(row.time_stamp)
+      : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+  }
+
+  const fields = [
+    { label: 'ID',               value: row.id       ?? '—' },
+    { label: 'Batch ID',         value: row.batch_id ?? '—' },
+    { label: 'Keyword',          value: row.keyword  ?? '—' },
+    { label: 'Country',          value: row.country  ?? '—' },
+    { label: 'Full URL',         value: row.url      ?? '—', isUrl: true },
+    { label: 'Clean Domain',     value: row.domain   ?? '—', isUrl: true },
+    { label: 'Position on Page', value: row.position_on_page ?? '—' },
+    { label: 'Page #',           value: row.page_number      ?? '—' },
+    { label: 'Overall Position', value: row.overall_position ?? '—' },
+    { label: 'Result Type',      value: row.result_type      ?? '—' },
+    { label: 'Rooster Partner',  value: roosterLabel },
+    { label: 'Affiliate Name',   value: row.affiliate_name ?? '—' },
+    { label: 'Status',           value: row.status   ?? '—' },
+    { label: 'Remarks',          value: row.remarks  ?? '—' },
+    { label: 'Timestamp',        value: timestampLabel },
+  ]
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">S-Tags List</h2>
-        <p className="modal-message">Rooster Partner: <strong>{roosterLabel}</strong></p>
-        <p className="table-hint" style={{ marginBottom: '0.5rem' }}>Double-click a cell in the <strong>S-Tag</strong> or <strong>Brand</strong> columns to edit it.</p>
-        {sTagsModal.loading ? (
-          <div className="modal-icon modal-icon--loading"><span className="spinner" /></div>
-        ) : (
-          <div className="stags-table-wrapper">
-            <table className="stags-table">
-              <thead>
-                <tr>
-                  <th>S-Tag ID</th>
-                  <th>S-Tag</th>
-                  <th>Brand</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sTagsModal.sTags.length === 0 ? (
-                  <tr><td colSpan={3} className="no-data">No S-Tags found.</td></tr>
-                ) : (
-                  sTagsModal.sTags.map((tag) => (
-                    <tr key={tag.s_tag_autoinc_id}>
-                      <td>{tag.s_tag_id}</td>
-                      {['s_tag', 'brand'].map((colKey) => {
-                        const isEditing = editingCell?.rowId === tag.s_tag_autoinc_id && editingCell?.colKey === colKey
-                        return (
-                          <td
-                            key={colKey}
-                            className={isEditing ? 'cell--editing' : 'cell--editable'}
-                            title={isEditing ? undefined : (tag[colKey] ?? '—')}
-                            onDoubleClick={!isEditing ? () => setEditingCell({ rowId: tag.s_tag_autoinc_id, colKey, value: tag[colKey] ?? '' }) : undefined}
-                          >
-                            {isEditing ? (
-                              <input
-                                className="cell-edit-input"
-                                type="text"
-                                value={editingCell.value}
-                                autoFocus
-                                onChange={(e) => setEditingCell((prev) => ({ ...prev, value: e.target.value }))}
-                                onBlur={commitCellEdit}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') e.currentTarget.blur()
-                                  if (e.key === 'Escape') cancelCellEdit()
-                                  if (e.key === 'Tab') { e.preventDefault(); commitCellEdit() }
-                                }}
-                              />
-                            ) : (tag[colKey] ?? '—')}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+      <div className="modal modal--profile" onClick={(e) => e.stopPropagation()}>
+        <button className="btn-modal-x" onClick={onClose} title="Close">✕</button>
+        <h2 className="modal-title">Row Profile</h2>
+
+        {/* ── Details grid ── */}
+        <div className="profile-grid">
+          {fields.map(({ label, value, isUrl }) => (
+            <div key={label} className="profile-row">
+              <span className="profile-label">{label}</span>
+              <span className="profile-value">
+                {isUrl && value && value !== '—'
+                  ? <a href={value} target="_blank" rel="noreferrer" className="cell-link">{value}</a>
+                  : String(value)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <hr className="profile-divider" />
+
+        {/* ── S-Tags section ── */}
+        <div className="profile-section">
+          <div className="profile-section-header">
+            <h3 className="profile-section-title">S-Tags</h3>
+            <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
+            <button className="btn-modal-cancel" style={{ marginLeft: 'auto' }} onClick={() => {
+              const rp = row.is_rooster_partner
+              if (rp !== true && rp !== 'true' && rp !== false && rp !== 'false') {
+                onError('Rooster Partner must be set before collecting S-Tags.')
+                return
+              }
+              onCollectSTags(row)
+            }}>Collect S-Tags</button>
           </div>
-        )}
-        <div className="modal-actions">
-          <button className="btn-modal-cancel" onClick={onAddMore}>+ Add S-Tag</button>
-          <button className="modal-close-btn" onClick={onClose}>Close</button>
+
+          {sTagsLoading ? (
+            <div className="modal-icon modal-icon--loading" style={{ margin: '0.75rem auto' }}><span className="spinner" /></div>
+          ) : (
+            <div className="stags-table-wrapper">
+              <table className="stags-table">
+                <thead>
+                  <tr>
+                    <th>S-Tag ID</th>
+                    <th>S-Tag <span className="field-required">*</span></th>
+                    <th>Brand <span className="field-required">*</span></th>
+                    <th style={{ width: '32px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sTags.length === 0 && newRows.length === 0 ? (
+                    <tr><td colSpan={4} className="no-data">No S-Tags yet.</td></tr>
+                  ) : (
+                    <>
+                      {sTags.map((tag) => (
+                        <tr key={tag.s_tag_autoinc_id}>
+                          <td>{tag.s_tag_id}</td>
+                          {['s_tag', 'brand'].map((colKey) => {
+                            const isEditing = editingCell?.rowId === tag.s_tag_autoinc_id && editingCell?.colKey === colKey
+                            return (
+                              <td
+                                key={colKey}
+                                className={isEditing ? 'cell--editing' : 'cell--editable'}
+                                onDoubleClick={!isEditing ? () => setEditingCell({ rowId: tag.s_tag_autoinc_id, colKey, value: tag[colKey] ?? '' }) : undefined}
+                              >
+                                {isEditing ? (
+                                  <input
+                                    className="cell-edit-input"
+                                    type="text"
+                                    value={editingCell.value}
+                                    autoFocus
+                                    onChange={(e) => setEditingCell((prev) => ({ ...prev, value: e.target.value }))}
+                                    onBlur={commitCellEdit}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter')  e.currentTarget.blur()
+                                      if (e.key === 'Escape') cancelCellEdit()
+                                      if (e.key === 'Tab')    { e.preventDefault(); commitCellEdit() }
+                                    }}
+                                  />
+                                ) : (tag[colKey] ?? '—')}
+                              </td>
+                            )
+                          })}
+                          <td>
+                            <button className="btn-remove-row" title="Delete S-Tag" onClick={() => handleDeleteSTag(tag.s_tag_autoinc_id)}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                      {newRows.map((nr, i) => (
+                        <tr key={`new-${i}`}>
+                          <td className="profile-value" style={{ color: '#9ca3af' }}>—</td>
+                          <td>
+                            <input
+                              className="cell-edit-input"
+                              type="text"
+                              value={nr.s_tag}
+                              placeholder="S-Tag value"
+                              onChange={(e) => setNewRows((prev) => prev.map((r, idx) => idx === i ? { ...r, s_tag: e.target.value } : r))}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="cell-edit-input"
+                              type="text"
+                              value={nr.brand}
+                              placeholder="Brand"
+                              onChange={(e) => setNewRows((prev) => prev.map((r, idx) => idx === i ? { ...r, brand: e.target.value } : r))}
+                            />
+                          </td>
+                          <td>
+                            <button className="btn-remove-row" onClick={() => setNewRows((prev) => prev.filter((_, idx) => idx !== i))}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="profile-stags-actions">
+            <button className="btn-add-row" onClick={() => setNewRows((prev) => [...prev, { s_tag: '', brand: '' }])}>+ Add S-Tag</button>
+            {newRows.length > 0 && (
+              <div className="modal-actions" style={{ marginTop: '0.5rem' }}>
+                <button className="btn-modal-cancel" onClick={() => setNewRows([])}>Cancel</button>
+                <button className="modal-close-btn" disabled={!canSaveNew} onClick={handleSaveNewRows} style={{ marginTop: 0 }}>Save</button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
-  )
-}
 
-function AddSTagsModal({ addSTagsModal, onSave, onCancel }) {
-  const [rows, setRows] = useState([{ s_tag: '', brand: '' }])
-
-  if (!addSTagsModal) return null
-
-  const addRow = () => setRows((prev) => [...prev, { s_tag: '', brand: '' }])
-
-  const removeRow = (i) => setRows((prev) => prev.filter((_, idx) => idx !== i))
-
-  const updateRow = (i, field, value) =>
-    setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
-
-  const canSave = rows.length > 0 && rows.every((r) => r.s_tag.trim() && r.brand.trim())
-
-  return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">Add S-Tags</h2>
-        <p className="modal-message">
-          Add one or more S-Tags for <strong>{addSTagsModal.domain}</strong>
-        </p>
-        <div className="stags-table-wrapper">
-          <table className="stags-table">
-            <thead>
-              <tr>
-                <th>S-Tag <span className="field-required">*</span></th>
-                <th>Brand <span className="field-required">*</span></th>
-                <th style={{ width: '32px' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i}>
-                  <td>
-                    <input
-                      className="cell-edit-input"
-                      type="text"
-                      value={row.s_tag}
-                      placeholder="S-Tag value"
-                      onChange={(e) => updateRow(i, 's_tag', e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="cell-edit-input"
-                      type="text"
-                      value={row.brand}
-                      placeholder="Brand"
-                      onChange={(e) => updateRow(i, 'brand', e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    {rows.length > 1 && (
-                      <button className="btn-remove-row" onClick={() => removeRow(i)}>✕</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <button className="btn-add-row" onClick={addRow}>+ Add another</button>
-        <div className="modal-actions">
-          <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="modal-close-btn" disabled={!canSave} onClick={() => onSave(addSTagsModal.rowId, rows, addSTagsModal.existingSTagId)}>Save</button>
-        </div>
       </div>
     </div>
   )
@@ -379,9 +472,8 @@ function App() {
   const [batchModal, setBatchModal]         = useState(null)
   const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
   const [passwordModal, setPasswordModal] = useState(null)
-  const [sTagsModal, setSTagsModal] = useState(null)
+  const [profileModal, setProfileModal] = useState(null)
   const [editingCell, setEditingCell] = useState(null) // { rowId, colKey, value }
-  const [addSTagsModal, setAddSTagsModal] = useState(null) // { rowId, domain }
   const pollRef            = useRef(null)
   const isCancellingEditRef = useRef(false)
 
@@ -560,20 +652,6 @@ function App() {
     setEditingCell(null)
   }
 
-  const handleCollectSTagsClick = async () => {
-    if (selectedRows.size === 0) {
-      setModal({ phase: 'error', data: { message: 'Please select a row to collect S-Tags for.' } })
-      return
-    }
-    if (selectedRows.size > 1) {
-      setModal({ phase: 'error', data: { message: 'Collect S-Tags only works on one row at a time. Please select a single row.' } })
-      return
-    }
-    const row = leads.find((r) => selectedRows.has(r.id))
-    const payload = { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }
-    await sendToWebhook(N8N_STAGS_WEBHOOK, payload)
-  }
-
   const handleProcessPPCClick = async () => {
     if (selectedRows.size === 0) {
       setModal({ phase: 'error', data: { message: 'Please select a row to process PPC for.' } })
@@ -603,91 +681,9 @@ function App() {
     await openBatchModal(webhookUrl)
   }
 
-  const handleSTagCellSave = async (autoIncId, colKey, value) => {
-    setSTagsModal((prev) => ({
-      ...prev,
-      sTags: prev.sTags.map((t) => t.s_tag_autoinc_id === autoIncId ? { ...t, [colKey]: value } : t),
-    }))
-    const { error } = await supabase
-      .from('s_tags_table')
-      .update({ [colKey]: value })
-      .eq('s_tag_autoinc_id', autoIncId)
-    if (error) {
-      setModal({ phase: 'error', data: { message: 'Failed to save S-Tag changes.' } })
-    }
-  }
-
-  const handleAddSTagsSave = async (rowId, sTags, existingSTagId) => {
-    let newSTagId
-
-    if (existingSTagId != null) {
-      // Adding more rows to an existing s_tag_id — no new ID needed
-      newSTagId = existingSTagId
-    } else {
-      // Get the current max s_tag_id to determine the next sequential ID
-      const { data: maxData, error: maxError } = await supabase
-        .from('s_tags_table')
-        .select('s_tag_id')
-        .order('s_tag_id', { ascending: false })
-        .limit(1)
-
-      if (maxError) {
-        setModal({ phase: 'error', data: { message: 'Failed to determine next S-Tag ID.' } })
-        return
-      }
-
-      newSTagId = parseInt(maxData?.[0]?.s_tag_id ?? 0, 10) + 1
-
-      // Update the main table row with the new s_tag_id
-      const { error: updateError } = await supabase
-        .from('google_lead_gen_table')
-        .update({ s_tag_id: newSTagId })
-        .eq('id', rowId)
-
-      if (updateError) {
-        setModal({ phase: 'error', data: { message: 'Failed to update row with new S-Tag ID.' } })
-        return
-      }
-    }
-
-    // Insert the s-tag rows
-    const { error: insertError } = await supabase
-      .from('s_tags_table')
-      .insert(sTags.map((t) => ({ s_tag_id: newSTagId, s_tag: t.s_tag, brand: t.brand })))
-
-    if (insertError) {
-      setModal({ phase: 'error', data: { message: 'Failed to insert S-Tags.' } })
-      return
-    }
-
-    setAddSTagsModal(null)
-
-    if (existingSTagId != null) {
-      // Refresh the S-Tags modal with the updated rows
-      const { data: refreshData } = await supabase
-        .from('s_tags_table')
-        .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
-        .eq('s_tag_id', existingSTagId)
-      setSTagsModal((prev) => ({ ...prev, sTags: refreshData ?? [] }))
-    } else {
-      setLeads((prev) => prev.map((r) => r.id === rowId ? { ...r, s_tag_id: newSTagId } : r))
-    }
-
-    setModal({ phase: 'success', data: { message: 'S-Tags saved successfully.' } })
-  }
-
-  const handleSTagClick = async (sTagId, isRoosterPartner, domain) => {
-    setSTagsModal({ loading: true, sTags: [], highlightId: sTagId, isRoosterPartner, domain })
-    const { data, error } = await supabase
-      .from('s_tags_table')
-      .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
-      .eq('s_tag_id', sTagId)
-    if (error) {
-      setSTagsModal(null)
-      setModal({ phase: 'error', data: { message: 'Failed to load S-Tag.' } })
-      return
-    }
-    setSTagsModal({ loading: false, sTags: data ?? [], highlightId: sTagId, isRoosterPartner, domain })
+  const handleLeadUpdate = (rowId, updates) => {
+    setLeads((prev) => prev.map((r) => r.id === rowId ? { ...r, ...updates } : r))
+    setProfileModal((prev) => prev ? { ...prev, ...updates } : prev)
   }
 
   const handleMondayClick = () => {
@@ -771,8 +767,6 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK)} disabled={loading}>Check if Rooster Partner</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleCollectSTagsClick} disabled={loading}>Collect S-Tags</button>
-          <span className="action-sep">›</span>
           <button className="btn-action">Collect Email &amp; Contact Info</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleMondayClick} disabled={loading}>Add Lead on Monday.com</button>
@@ -796,8 +790,9 @@ function App() {
                     onChange={toggleSelectAll}
                   />
                 </th>
+                <th className="col-view"></th>
                 {TABLE_COLUMNS.map((col) => (
-                  <th key={col.key}>{col.label}</th>
+                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : undefined}>{col.label}</th>
                 ))}
               </tr>
             </thead>
@@ -825,6 +820,14 @@ function App() {
                         disabled={isInvalid(row.status)}
                       />
                     </td>
+                    <td className="col-view">
+                      <button className="btn-row-view" title="View profile" onClick={() => setProfileModal(row)}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </button>
+                    </td>
                     {TABLE_COLUMNS.map((col) => {
                       const raw = row[col.key]
                       const editConf = EDITABLE_COLS[col.key]
@@ -844,7 +847,7 @@ function App() {
                         value = raw ?? '—'
                       }
 
-                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'time_stamp' ? 'col-timestamp' : undefined
+                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'time_stamp' ? 'col-timestamp' : col.key === 's_tag_id' ? 'col-stag' : undefined
                       const className = [baseClass, isEditing ? 'cell--editing' : editConf ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
 
                       return (
@@ -890,18 +893,14 @@ function App() {
                                 }}
                               />
                             )
+                          ) : col.key === 's_tag_id' ? (
+                            <span className={row[col.key] ? 'stag-indicator stag-indicator--yes' : 'stag-indicator stag-indicator--no'}>
+                              {row[col.key] ? '✓' : '✗'}
+                            </span>
                           ) : (col.key === 'url' || col.key === 'domain') && row[col.key] ? (
                             <a href={row[col.key]} target="_blank" rel="noreferrer" className="cell-link">
                               {row[col.key]}
                             </a>
-                          ) : col.key === 's_tag_id' && row[col.key] ? (
-                            <button className="cell-link cell-link--btn" onClick={() => handleSTagClick(row[col.key], row.is_rooster_partner, row.domain)}>
-                              Click here
-                            </button>
-                          ) : col.key === 's_tag_id' && !row[col.key] ? (
-                            <span className="cell-add-stag" onDoubleClick={() => setAddSTagsModal({ rowId: row.id, domain: row.domain })}>
-                              Double-click to add
-                            </span>
                           ) : value}
                         </td>
                       )
@@ -914,14 +913,13 @@ function App() {
         </div>
       </div>
 
-      <STagsModal
-        sTagsModal={sTagsModal}
-        onClose={() => setSTagsModal(null)}
-        onCellSave={handleSTagCellSave}
-        onAddMore={() => setAddSTagsModal({ existingSTagId: sTagsModal.highlightId, domain: sTagsModal.domain })}
+      <ProfileModal
+        profileModal={profileModal}
+        onClose={() => setProfileModal(null)}
+        onLeadUpdate={handleLeadUpdate}
+        onError={(msg) => setModal({ phase: 'error', data: { message: msg } })}
+        onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
       />
-
-      <AddSTagsModal addSTagsModal={addSTagsModal} onSave={handleAddSTagsSave} onCancel={() => setAddSTagsModal(null)} />
 
       <Modal modal={modal} onClose={handleModalClose} />
 

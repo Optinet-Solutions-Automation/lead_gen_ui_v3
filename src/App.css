@@ -357,19 +357,6 @@ td.cell--editing {
   box-sizing: border-box;
 }
 
-/* ── Add S-Tag cell hint ─────────────────────────────── */
-.cell-add-stag {
-  font-size: 0.78rem;
-  color: #9ca3af;
-  cursor: pointer;
-  font-style: italic;
-}
-
-.cell-add-stag:hover {
-  color: #1e4d6b;
-  text-decoration: underline;
-}
-
 /* ── Add S-Tags modal buttons ────────────────────────── */
 .btn-add-row {
   display: inline-block;
@@ -701,4 +688,149 @@ td.cell--editing {
 
 .btn-modal-cancel:hover {
   background-color: #f0f2f5;
+}
+
+/* ── Row view button ─────────────────────────────────── */
+.leads-table .col-view {
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+  padding: 0.75rem 0;
+  text-align: center;
+}
+
+.btn-row-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 3px;
+  border-radius: 4px;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.btn-row-view:hover {
+  color: #1e4d6b;
+  background-color: #e9f0f5;
+}
+
+/* ── S-Tag indicator column ──────────────────────────── */
+.leads-table .col-stag {
+  width: 56px;
+  min-width: 56px;
+  text-align: center;
+}
+
+.stag-indicator {
+  display: inline-block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stag-indicator--yes { color: #16a34a; }
+.stag-indicator--no  { color: #dc2626; }
+
+/* ── Profile Modal ───────────────────────────────────── */
+.modal--profile {
+  max-width: 820px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  text-align: left;
+  position: relative;
+}
+
+.btn-modal-x {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.btn-modal-x:hover {
+  color: #1e4d6b;
+  background-color: #e9f0f5;
+}
+
+.modal--profile .stags-table-wrapper {
+  max-height: none;
+}
+
+.profile-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+}
+
+.profile-label {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+}
+
+.profile-value {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.82rem;
+  color: #1f2937;
+  word-break: break-all;
+}
+
+.profile-section {
+  margin-top: 1.25rem;
+  text-align: left;
+}
+
+.profile-section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.profile-section-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1e4d6b;
+}
+
+.profile-stags-actions {
+  margin-top: 0.6rem;
+}
+
+.profile-divider {
+  border: none;
+  border-top: 2px solid #1e4d6b;
+  margin: 1.5rem 0;
+  opacity: 0.2;
 }
