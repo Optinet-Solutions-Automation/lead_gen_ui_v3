@@ -152,7 +152,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     } else {
       setContacts([])
     }
-  }, [profileModal?.id])
+  }, [profileModal?.id, profileModal?.s_tag_id])
 
   if (!profileModal) return null
 
@@ -756,7 +756,14 @@ function App() {
       .from('google_lead_gen_table')
       .select('*')
       .order('id', { ascending: false })
-    if (!error) setLeads(data ?? [])
+    if (!error) {
+      setLeads(data ?? [])
+      setProfileModal((prev) => {
+        if (!prev) return null
+        const fresh = (data ?? []).find((r) => r.id === prev.id)
+        return fresh ? { ...prev, ...fresh } : prev
+      })
+    }
     setTableLoading(false)
   }
 
