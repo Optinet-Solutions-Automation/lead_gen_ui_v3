@@ -299,6 +299,9 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     row.is_rooster_partner === true  || row.is_rooster_partner === 'true'  ? 'Yes' :
     row.is_rooster_partner === false || row.is_rooster_partner === 'false' ? 'No'  : '—'
 
+  const roosterIsTrue  = row.is_rooster_partner === true  || row.is_rooster_partner === 'true'
+  const roosterIsSet   = roosterIsTrue || row.is_rooster_partner === false || row.is_rooster_partner === 'false'
+
   let timestampLabel = '—'
   if (row.time_stamp) {
     const d = new Date(row.time_stamp)
@@ -344,10 +347,10 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           ))}
         </div>
 
-        <hr className="profile-divider" />
+        {roosterIsSet && <hr className="profile-divider" />}
 
         {/* ── S-Tags section ── */}
-        <div className="profile-section">
+        {roosterIsSet && <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">S-Tags</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -455,12 +458,12 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        <hr className="profile-divider" />
+        {roosterIsTrue && <hr className="profile-divider" />}
 
         {/* ── Contacts section ── */}
-        <div className="profile-section">
+        {roosterIsTrue && <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">Contacts</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -582,7 +585,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
       </div>
     </div>
