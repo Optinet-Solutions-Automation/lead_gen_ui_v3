@@ -300,7 +300,8 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     row.is_rooster_partner === false || row.is_rooster_partner === 'false' ? 'No'  : '—'
 
   const roosterIsTrue  = row.is_rooster_partner === true  || row.is_rooster_partner === 'true'
-  const roosterIsSet   = roosterIsTrue || row.is_rooster_partner === false || row.is_rooster_partner === 'false'
+  const roosterIsFalse = row.is_rooster_partner === false || row.is_rooster_partner === 'false'
+  const roosterIsSet   = roosterIsTrue || roosterIsFalse
 
   let timestampLabel = '—'
   if (row.time_stamp) {
@@ -460,10 +461,10 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           </div>
         </div>}
 
-        {roosterIsTrue && <hr className="profile-divider" />}
+        {roosterIsFalse && <hr className="profile-divider" />}
 
         {/* ── Contacts section ── */}
-        {roosterIsTrue && <div className="profile-section">
+        {roosterIsFalse && <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">Contacts</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -919,11 +920,11 @@ function App() {
     await sendToWebhook(N8N_PPC_WEBHOOK, payload)
   }
 
-  const handleBatchActionClick = (webhookUrl) => async () => {
+  const handleBatchActionClick = (webhookUrl, extraFields = []) => async () => {
     if (selectedRows.size > 0) {
       const payload = leads
         .filter((r) => selectedRows.has(r.id) && !isInvalid(r.status))
-        .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+        .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(extraFields.map((f) => [f, r[f] ?? null])) }))
       await sendToWebhook(webhookUrl, payload)
       return
     }
@@ -1014,7 +1015,7 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Domain Duplicates</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK)} disabled={loading}>Check if Rooster Partner</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if Rooster Partner</button>
           <span className="action-sep">›</span>
           <button className="btn-action">Collect Email &amp; Contact Info</button>
           <span className="action-sep">›</span>
