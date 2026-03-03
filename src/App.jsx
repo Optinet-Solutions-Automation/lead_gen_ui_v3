@@ -356,10 +356,10 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           ))}
         </div>
 
-        {roosterIsSet && <hr className="profile-divider" />}
+        {roosterIsSet && !isInvalid(row.status) && <hr className="profile-divider" />}
 
         {/* ── S-Tags section ── */}
-        {roosterIsSet && <div className="profile-section">
+        {roosterIsSet && !isInvalid(row.status) && <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">S-Tags</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -469,10 +469,10 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           </div>
         </div>}
 
-        {roosterIsFalse && <hr className="profile-divider" />}
+        {roosterIsFalse && !isInvalid(row.status) && <hr className="profile-divider" />}
 
         {/* ── Contacts section ── */}
-        {roosterIsFalse && <div className="profile-section">
+        {roosterIsFalse && !isInvalid(row.status) && <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">Contacts</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
