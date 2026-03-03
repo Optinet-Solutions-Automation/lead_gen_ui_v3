@@ -103,7 +103,7 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
 
 const CONTACT_TYPE_OPTIONS = ['Email', 'Phone', 'LinkedIn', 'Website']
 
-function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags }) {
+function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, profileRefreshKey }) {
   const [sTags, setSTags]                           = useState([])
   const [sTagsLoading, setSTagsLoading]             = useState(false)
   const [editingCell, setEditingCell]               = useState(null)
@@ -153,6 +153,14 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
       setContacts([])
     }
   }, [profileModal?.id, profileModal?.s_tag_id])
+
+  useEffect(() => {
+    if (!profileRefreshKey || !profileModal?.s_tag_id) return
+    setSTagsLoading(true)
+    supabase.from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
+      .eq('s_tag_id', profileModal.s_tag_id)
+      .then(({ data, error }) => { setSTagsLoading(false); if (!error) setSTags(data ?? []) })
+  }, [profileRefreshKey])
 
   if (!profileModal) return null
 
@@ -713,6 +721,7 @@ function App() {
   const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
   const [passwordModal, setPasswordModal] = useState(null)
   const [profileModal, setProfileModal] = useState(null)
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0)
   const [editingCell, setEditingCell] = useState(null) // { rowId, colKey, value }
   const pollRef            = useRef(null)
   const isCancellingEditRef = useRef(false)
@@ -835,7 +844,10 @@ function App() {
 
   const handleModalClose = () => {
     stopPolling()
-    if (modal?.phase === 'success') fetchLeads()
+    if (modal?.phase === 'success') {
+      fetchLeads()
+      setProfileRefreshKey((k) => k + 1)
+    }
     setModal(null)
   }
 
@@ -1211,6 +1223,7 @@ function App() {
         onClose={() => setProfileModal(null)}
         onLeadUpdate={handleLeadUpdate}
         onError={(msg) => setModal({ phase: 'error', data: { message: msg } })}
+        profileRefreshKey={profileRefreshKey}
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
       />
 
