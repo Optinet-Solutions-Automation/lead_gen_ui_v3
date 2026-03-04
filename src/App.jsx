@@ -13,7 +13,7 @@ const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
 const N8N_CONTACTS_WEBHOOK   = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
-const POLL_TIMEOUT_MS  = 10 * 60 * 1000 // 10 minutes
+const POLL_TIMEOUT_MS  = 30 * 60 * 1000 // 30 minutes
 
 const TABLE_COLUMNS = [
   { key: 'id',                 label: 'ID' },
