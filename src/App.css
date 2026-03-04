@@ -772,7 +772,7 @@ td.cell--editing {
 
 /* ── Profile Modal ───────────────────────────────────── */
 .modal--profile {
-  max-width: 820px;
+  max-width: 1060px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;

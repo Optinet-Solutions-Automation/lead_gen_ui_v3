@@ -10,6 +10,7 @@ const MONDAY_PASSWORD        = import.meta.env.VITE_MONDAY_PASSWORD
 const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
 const N8N_ROOSTER_WEBHOOK    = import.meta.env.VITE_N8N_ROOSTER_WEBHOOK_URL
 const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
+const N8N_CONTACTS_WEBHOOK   = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 10 * 60 * 1000 // 10 minutes
@@ -101,9 +102,9 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
 }
 
 
-const CONTACT_TYPE_OPTIONS = ['Email', 'Phone', 'LinkedIn', 'Website']
+const CONTACT_TYPE_OPTIONS = ['Email', 'Phone', 'LinkedIn', 'Twitter', 'Website']
 
-function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, profileRefreshKey }) {
+function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, onCollectContacts, profileRefreshKey }) {
   const [sTags, setSTags]                           = useState([])
   const [sTagsLoading, setSTagsLoading]             = useState(false)
   const [editingCell, setEditingCell]               = useState(null)
@@ -142,7 +143,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
       setContactsLoading(true)
       supabase
         .from('contact_table')
-        .select('contact_autoinc_id, contact_id, contact_detail, contact_type')
+        .select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source')
         .eq('contact_id', profileModal.contact_id)
         .then(({ data, error }) => {
           setContactsLoading(false)
@@ -152,14 +153,22 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     } else {
       setContacts([])
     }
-  }, [profileModal?.id, profileModal?.s_tag_id])
+  }, [profileModal?.id, profileModal?.s_tag_id, profileModal?.contact_id])
 
   useEffect(() => {
-    if (!profileRefreshKey || !profileModal?.s_tag_id) return
-    setSTagsLoading(true)
-    supabase.from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
-      .eq('s_tag_id', profileModal.s_tag_id)
-      .then(({ data, error }) => { setSTagsLoading(false); if (!error) setSTags(data ?? []) })
+    if (!profileRefreshKey) return
+    if (profileModal?.s_tag_id) {
+      setSTagsLoading(true)
+      supabase.from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
+        .eq('s_tag_id', profileModal.s_tag_id)
+        .then(({ data, error }) => { setSTagsLoading(false); if (!error) setSTags(data ?? []) })
+    }
+    if (profileModal?.contact_id) {
+      setContactsLoading(true)
+      supabase.from('contact_table').select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source')
+        .eq('contact_id', profileModal.contact_id)
+        .then(({ data, error }) => { setContactsLoading(false); if (!error) setContacts(data ?? []) })
+    }
   }, [profileRefreshKey])
 
   if (!profileModal) return null
@@ -245,11 +254,11 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
 
     const { error: insertError } = await supabase
       .from('contact_table')
-      .insert(newContactRows.map((r) => ({ contact_id: contactId, contact_detail: r.contact_detail, contact_type: r.contact_type })))
+      .insert(newContactRows.map((r) => ({ contact_id: contactId, full_name: r.full_name, contact_detail: r.contact_detail, contact_type: r.contact_type, source: r.source })))
     if (insertError) { onError('Failed to insert contacts.'); return }
 
     const { data: refreshData } = await supabase
-      .from('contact_table').select('contact_autoinc_id, contact_id, contact_detail, contact_type').eq('contact_id', contactId)
+      .from('contact_table').select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source').eq('contact_id', contactId)
     setContacts(refreshData ?? [])
     setNewContactRows([])
   }
@@ -476,6 +485,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           <div className="profile-section-header">
             <h3 className="profile-section-title">Contacts</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
+            <button className="btn-modal-cancel" style={{ marginLeft: 'auto' }} onClick={() => onCollectContacts(row)}>Collect Email &amp; Contact Info</button>
           </div>
 
           {contactsLoading ? (
@@ -486,26 +496,30 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                 <thead>
                   <tr>
                     <th>Contact ID</th>
-                    <th>Type <span className="field-required">*</span></th>
+                    <th>Full Name</th>
                     <th>Detail <span className="field-required">*</span></th>
+                    <th>Type <span className="field-required">*</span></th>
+                    {newContactRows.length === 0 && <th>Source</th>}
                     <th style={{ width: '32px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {contacts.length === 0 && newContactRows.length === 0 ? (
-                    <tr><td colSpan={4} className="no-data">No contacts yet.</td></tr>
+                    <tr><td colSpan={6} className="no-data">No contacts yet.</td></tr>
                   ) : (
                     <>
                       {contacts.map((contact) => (
                         <tr key={contact.contact_autoinc_id}>
                           <td>{contact.contact_id}</td>
-                          {['contact_type', 'contact_detail'].map((colKey) => {
-                            const isEditing = editingContactCell?.rowId === contact.contact_autoinc_id && editingContactCell?.colKey === colKey
+                          {['full_name', 'contact_detail', 'contact_type', 'source'].map((colKey) => {
+                            if (colKey === 'source' && newContactRows.length > 0) return null
+                            const editable = colKey !== 'source'
+                            const isEditing = editable && editingContactCell?.rowId === contact.contact_autoinc_id && editingContactCell?.colKey === colKey
                             return (
                               <td
                                 key={colKey}
-                                className={isEditing ? 'cell--editing' : 'cell--editable'}
-                                onDoubleClick={!isEditing ? () => setEditingContactCell({ rowId: contact.contact_autoinc_id, colKey, value: contact[colKey] ?? '' }) : undefined}
+                                className={isEditing ? 'cell--editing' : editable ? 'cell--editable' : undefined}
+                                onDoubleClick={editable && !isEditing ? () => setEditingContactCell({ rowId: contact.contact_autoinc_id, colKey, value: contact[colKey] ?? '' }) : undefined}
                               >
                                 {isEditing ? (
                                   colKey === 'contact_type' ? (
@@ -553,6 +567,24 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                         <tr key={`new-contact-${i}`}>
                           <td className="profile-value" style={{ color: '#9ca3af' }}>—</td>
                           <td>
+                            <input
+                              className="cell-edit-input"
+                              type="text"
+                              value={nr.full_name}
+                              placeholder="Full name"
+                              onChange={(e) => setNewContactRows((prev) => prev.map((r, idx) => idx === i ? { ...r, full_name: e.target.value } : r))}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="cell-edit-input"
+                              type="text"
+                              value={nr.contact_detail}
+                              placeholder="Contact detail"
+                              onChange={(e) => setNewContactRows((prev) => prev.map((r, idx) => idx === i ? { ...r, contact_detail: e.target.value } : r))}
+                            />
+                          </td>
+                          <td>
                             <select
                               className="cell-edit-input"
                               value={nr.contact_type}
@@ -563,15 +595,6 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                                 <option key={opt} value={opt}>{opt}</option>
                               ))}
                             </select>
-                          </td>
-                          <td>
-                            <input
-                              className="cell-edit-input"
-                              type="text"
-                              value={nr.contact_detail}
-                              placeholder="Contact detail"
-                              onChange={(e) => setNewContactRows((prev) => prev.map((r, idx) => idx === i ? { ...r, contact_detail: e.target.value } : r))}
-                            />
                           </td>
                           <td>
                             <button className="btn-remove-row" onClick={() => setNewContactRows((prev) => prev.filter((_, idx) => idx !== i))}>✕</button>
@@ -586,7 +609,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           )}
 
           <div className="profile-stags-actions">
-            <button className="btn-add-row" onClick={() => setNewContactRows((prev) => [...prev, { contact_detail: '', contact_type: '' }])}>+ Add Contact</button>
+            <button className="btn-add-row" onClick={() => setNewContactRows((prev) => [...prev, { full_name: '', contact_detail: '', contact_type: '', source: 'Manual Input' }])}>+ Add Contact</button>
             {newContactRows.length > 0 && (
               <div className="modal-actions" style={{ marginTop: '0.5rem' }}>
                 <button className="btn-modal-cancel" onClick={() => setNewContactRows([])}>Cancel</button>
@@ -1036,8 +1059,6 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if Rooster Partner</button>
           <span className="action-sep">›</span>
-          <button className="btn-action">Collect Email &amp; Contact Info</button>
-          <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleMondayClick} disabled={loading}>Add Lead on Monday.com</button>
         </div>
         <div className="action-bar">
@@ -1225,6 +1246,7 @@ function App() {
         onError={(msg) => setModal({ phase: 'error', data: { message: msg } })}
         profileRefreshKey={profileRefreshKey}
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
+        onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
       />
 
       <Modal modal={modal} onClose={handleModalClose} />
