@@ -17,18 +17,18 @@ const POLL_TIMEOUT_MS  = 30 * 60 * 1000 // 30 minutes
 
 const TABLE_COLUMNS = [
   { key: 'id',                 label: 'ID' },
-  { key: 'batch_id',           label: 'Batch ID' },
-  { key: 'keyword',            label: 'Keyword' },
-  { key: 'country',            label: 'Country' },
-  { key: 'url',                label: 'Full URL' },
-  { key: 'domain',             label: 'Clean Domain' },
-  { key: 'result_type',        label: 'Result Type' },
-  { key: 'is_rooster_partner', label: 'Rooster Partner' },
-  { key: 's_tag_id',           label: 'S-Tag' },
-  { key: 'contact_id',         label: 'Contact' },
+  { key: 'batch_id',           label: 'Batch ID',        hasFilter: true },
+  { key: 'keyword',            label: 'Keyword',         hasFilter: true, filterType: 'text' },
+  { key: 'country',            label: 'Country',         noSort: true, hasFilter: true },
+  { key: 'url',                label: 'Full URL',        hasFilter: true, filterType: 'text' },
+  { key: 'domain',             label: 'Clean Domain',    hasFilter: true, filterType: 'text' },
+  { key: 'result_type',        label: 'Result Type',     noSort: true, hasFilter: true },
+  { key: 'is_rooster_partner', label: 'Rooster Partner', noSort: true, hasFilter: true, filterType: 'boolean' },
+  { key: 's_tag_id',           label: 'S-Tag',           noSort: true, hasFilter: true, filterType: 'presence' },
+  { key: 'contact_id',         label: 'Contact',         noSort: true, hasFilter: true, filterType: 'presence' },
   { key: 'affiliate_name',     label: 'Affiliate Name' },
-  { key: 'status',             label: 'Status' },
-  { key: 'remarks',            label: 'Remarks' },
+  { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterOptions: ['Not Set', 'INVALID'] },
+  { key: 'remarks',            label: 'Remarks',         noSort: true },
 ]
 
 const EDITABLE_COLS = {
@@ -746,6 +746,13 @@ function App() {
   const [profileModal, setProfileModal] = useState(null)
   const [profileRefreshKey, setProfileRefreshKey] = useState(0)
   const [editingCell, setEditingCell] = useState(null) // { rowId, colKey, value }
+  const [sortCol, setSortCol] = useState(null)  // column key
+  const [sortDir, setSortDir] = useState(null)  // 'asc' | 'desc' | null
+  const [filterOpen, setFilterOpen] = useState(null)  // column key of open filter popup, or null
+  const [activeFilters, setActiveFilters] = useState({})  // { [colKey]: Set }
+  const [textFilters, setTextFilters] = useState({})      // { [colKey]: string } — committed on Enter
+  const [textFilterDrafts, setTextFilterDrafts] = useState({})  // { [colKey]: string } — live input value
+  const filterPopupRef = useRef(null)
   const pollRef            = useRef(null)
   const isCancellingEditRef = useRef(false)
 
@@ -799,17 +806,83 @@ function App() {
     setTableLoading(false)
   }
 
+  // ── Click-outside to close filter popup ─────────────────
+  useEffect(() => {
+    if (!filterOpen) return
+    const handler = (e) => { if (filterPopupRef.current && !filterPopupRef.current.contains(e.target)) setFilterOpen(null) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [filterOpen])
+
+  const getUniqueValues = (colKey) => [...new Set(leads.map((r) => r[colKey]).filter(Boolean))].sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { numeric: true })
+  )
+
+  const toggleFilterValue = (colKey, val) => setActiveFilters((prev) => {
+    const cur = new Set(prev[colKey] ?? [])
+    cur.has(val) ? cur.delete(val) : cur.add(val)
+    return { ...prev, [colKey]: cur }
+  })
+
+  const clearFilter = (colKey) => setActiveFilters((prev) => { const next = { ...prev }; delete next[colKey]; return next })
+
   const searchTerm = search.trim()
   const SEARCH_EXCLUDE_KEYS = new Set(['is_rooster_partner', 's_tag_id', 'contact_id', 'remarks'])
+  const columnFilteredLeads = leads.filter((r) => {
+    const passesText = Object.entries(textFilters).every(([key, term]) => {
+      if (!term.trim()) return true
+      return String(r[key] ?? '').toLowerCase().includes(term.trim().toLowerCase())
+    })
+    if (!passesText) return false
+    return Object.entries(activeFilters).every(([key, set]) => {
+      if (!set || set.size === 0) return true
+      const col = TABLE_COLUMNS.find((c) => c.key === key)
+      if (col?.filterType === 'boolean') {
+        const v = r[key]
+        if (set.has('Yes')     && (v === true  || v === 'true'))  return true
+        if (set.has('No')      && (v === false || v === 'false')) return true
+        if (set.has('Not Set') && (v === null  || v === undefined)) return true
+        return false
+      }
+      if (col?.filterType === 'presence') {
+        const v = r[key]
+        if (set.has('Yes') && (v !== null && v !== undefined)) return true
+        if (set.has('No')  && (v === null || v === undefined))  return true
+        return false
+      }
+      if (col?.filterOptions) {
+        const v = r[key]
+        if (set.has('Not Set') && (v === null || v === undefined || v === '')) return true
+        if ([...set].filter((s) => s !== 'Not Set').some((s) => String(v).toUpperCase() === s.toUpperCase())) return true
+        return false
+      }
+      return set.has(r[key])
+    })
+  })
   const filteredLeads = searchTerm.length >= 3
-    ? leads.filter((row) =>
+    ? columnFilteredLeads.filter((row) =>
         Object.entries(row).some(([key, val]) =>
           !SEARCH_EXCLUDE_KEYS.has(key) && val != null && String(val).toLowerCase().includes(searchTerm.toLowerCase())
         )
       )
-    : leads
+    : columnFilteredLeads
 
-  const selectableLeads = filteredLeads.filter((r) => !isInvalid(r.status))
+  const handleSortClick = (key) => {
+    if (sortCol !== key) { setSortCol(key); setSortDir('asc'); return }
+    if (sortDir === 'asc')  { setSortDir('desc'); return }
+    setSortCol(null); setSortDir(null)
+  }
+
+  const sortedLeads = sortCol && sortDir
+    ? [...filteredLeads].sort((a, b) => {
+        const av = a[sortCol] ?? ''
+        const bv = b[sortCol] ?? ''
+        const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' })
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+    : filteredLeads
+
+  const selectableLeads = sortedLeads.filter((r) => !isInvalid(r.status))
   const allSelected  = selectableLeads.length > 0 && selectedRows.size === selectableLeads.length
   const someSelected = selectedRows.size > 0 && !allSelected
 
@@ -1082,7 +1155,77 @@ function App() {
                 </th>
                 <th className="col-view"></th>
                 {TABLE_COLUMNS.map((col) => (
-                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined}>{col.label}</th>
+                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined}>
+                    <span className="th-content">
+                      {col.label}
+                      {!col.noSort && (
+                        <button className="sort-btn" onClick={() => handleSortClick(col.key)} title={`Sort by ${col.label}`}>
+                          {sortCol === col.key && sortDir === 'asc' ? '↑' : sortCol === col.key && sortDir === 'desc' ? '↓' : '↕'}
+                        </button>
+                      )}
+                      {col.hasFilter && (
+                        <span className="batch-filter-wrap" ref={filterOpen === col.key ? filterPopupRef : null}>
+                          <button
+                            className={`sort-btn batch-filter-btn${(activeFilters[col.key]?.size > 0 || textFilters[col.key]?.trim()) ? ' batch-filter-btn--active' : ''}`}
+                            title={`Filter by ${col.label}`}
+                            onClick={() => setFilterOpen((v) => v === col.key ? null : col.key)}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                          </button>
+                          {filterOpen === col.key && (
+                            <div className="batch-filter-popup">
+                              <div className="batch-filter-header">
+                                <span>Filter by {col.label}</span>
+                                {(activeFilters[col.key]?.size > 0 || textFilters[col.key]?.trim()) && (
+                                  <button className="batch-filter-clear" onClick={() => {
+                                    clearFilter(col.key)
+                                    setTextFilters((prev) => { const next = { ...prev }; delete next[col.key]; return next })
+                                    setTextFilterDrafts((prev) => { const next = { ...prev }; delete next[col.key]; return next })
+                                  }}>Clear</button>
+                                )}
+                              </div>
+                              {col.filterType === 'text' && <p className="batch-filter-hint">Press Enter to apply.</p>}
+                              {col.filterType === 'text' ? (
+                                <div className="batch-filter-text">
+                                  <input
+                                    className="batch-filter-text-input"
+                                    type="text"
+                                    placeholder={`Search ${col.label}…`}
+                                    value={textFilterDrafts[col.key] ?? ''}
+                                    onChange={(e) => setTextFilterDrafts((prev) => ({ ...prev, [col.key]: e.target.value }))}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') setTextFilters((prev) => ({ ...prev, [col.key]: e.target.value }))
+                                    }}
+                                    autoFocus
+                                  />
+                                </div>
+                              ) : (
+                              <ul className="batch-filter-list">
+                                {(col.filterType === 'boolean' ? ['Yes', 'No', 'Not Set'] : col.filterType === 'presence' ? ['Yes', 'No'] : col.filterOptions ? col.filterOptions : getUniqueValues(col.key)).map((val) => (
+                                  <li key={val} className="batch-filter-item">
+                                    <label>
+                                      <input
+                                        type="checkbox"
+                                        checked={activeFilters[col.key]?.has(val) ?? false}
+                                        onChange={() => toggleFilterValue(col.key, val)}
+                                      />
+                                      {(col.filterType === 'boolean' || col.filterType === 'presence') && (
+                                        <span className={val === 'Yes' ? 'stag-indicator stag-indicator--yes' : val === 'No' ? 'stag-indicator stag-indicator--no' : 'stag-indicator stag-indicator--unknown'}>
+                                          {val === 'Yes' ? '✓' : val === 'No' ? '✗' : '?'}
+                                        </span>
+                                      )}
+                                      {val}
+                                    </label>
+                                  </li>
+                                ))}
+                              </ul>
+                              )}
+                            </div>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -1093,14 +1236,14 @@ function App() {
                     Loading...
                   </td>
                 </tr>
-              ) : filteredLeads.length === 0 ? (
+              ) : sortedLeads.length === 0 ? (
                 <tr>
                   <td colSpan={TABLE_COLUMNS.length + 1} className="no-data">
                     {searchTerm.length >= 3 ? `No results for "${searchTerm}".` : 'No data to display.'}
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map((row) => (
+                sortedLeads.map((row) => (
                   <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', isInvalid(row.status) ? 'row-invalid' : '', isLead(row.status) ? 'row-lead' : ''].filter(Boolean).join(' ')}>
                     <td className="col-checkbox">
                       <input
