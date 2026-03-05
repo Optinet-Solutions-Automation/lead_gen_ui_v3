@@ -1031,7 +1031,7 @@ function App() {
       setModal({ phase: 'error', data: { message: 'The selected row must have a Result Type of PPC.' } })
       return
     }
-    const payload = { id: row.id, url: row.url, domain: row.domain, is_rooster_partner: row.is_rooster_partner ?? null }
+    const payload = { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }
     await sendToWebhook(N8N_PPC_WEBHOOK, payload)
   }
 
