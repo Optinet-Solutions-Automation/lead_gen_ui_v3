@@ -26,7 +26,7 @@ const TABLE_COLUMNS = [
   { key: 'is_rooster_partner', label: 'Rooster Partner', noSort: true, hasFilter: true, filterType: 'boolean' },
   { key: 's_tag_id',           label: 'S-Tag',           noSort: true, hasFilter: true, filterType: 'presence' },
   { key: 'contact_id',         label: 'Contact',         noSort: true, hasFilter: true, filterType: 'presence' },
-  { key: 'affiliate_name',     label: 'Affiliate Name' },
+  { key: 'affiliate_name',     label: 'Affiliate Name',  hasFilter: true, filterType: 'text' },
   { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterOptions: ['Not Set', 'INVALID'] },
   { key: 'remarks',            label: 'Remarks',         noSort: true },
 ]
