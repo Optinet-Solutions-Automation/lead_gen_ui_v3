@@ -355,11 +355,12 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
   ]
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--profile" onClick={(e) => e.stopPropagation()}>
         <div className="profile-topbar">
           {row.screenshot_view_link && (
-            <button className="btn-modal-x" title={showScreenshot ? 'Hide Screenshot' : 'View Screenshot'} onClick={() => setShowScreenshot((v) => !v)}>
+            <button className="btn-modal-x" title="View Screenshot" onClick={() => setShowScreenshot(true)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           )}
@@ -388,12 +389,6 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
             </div>
           ))}
         </div>
-
-        {showScreenshot && row.screenshot_view_link && (
-          <div className="profile-screenshot-preview">
-            <img src={toGoogleDriveImageUrl(row.screenshot_view_link)} alt="Screenshot" className="profile-screenshot-img" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-          </div>
-        )}
 
         {roosterIsSet && !isInvalid(row.status) && <hr className="profile-divider" />}
 
@@ -657,6 +652,22 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
 
       </div>
     </div>
+
+    {/* ── Screenshot modal ── */}
+    {showScreenshot && row.screenshot_view_link && (
+      <div className="modal-overlay screenshot-modal-overlay" onClick={() => setShowScreenshot(false)}>
+        <div className="screenshot-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="btn-modal-x screenshot-modal-close" onClick={() => setShowScreenshot(false)} title="Close">✕</button>
+          <img
+            src={toGoogleDriveImageUrl(row.screenshot_view_link)}
+            alt="Screenshot"
+            className="screenshot-modal-img"
+            onError={(e) => { e.currentTarget.alt = 'Image could not be loaded.' }}
+          />
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
