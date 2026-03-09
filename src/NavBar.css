@@ -1,0 +1,32 @@
+/* ── Navigation Bar ──────────────────────────────────── */
+.navbar {
+  background: #1a2e44;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 1.5rem;
+}
+
+.navbar-link {
+  display: inline-block;
+  padding: 0.85rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.navbar-link:hover {
+  color: #ffffff;
+}
+
+.navbar-link--active {
+  color: #ffffff;
+  border-bottom-color: #4da3cc;
+}
