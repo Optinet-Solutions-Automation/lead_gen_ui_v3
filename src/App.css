@@ -907,10 +907,16 @@ td.cell--editing {
   position: relative;
 }
 
-.btn-modal-x {
+.profile-topbar {
   position: absolute;
   top: 1rem;
   right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.btn-modal-x {
   background: none;
   border: none;
   cursor: pointer;
@@ -919,12 +925,33 @@ td.cell--editing {
   border-radius: 4px;
   font-size: 1.1rem;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
   transition: color 0.15s, background-color 0.15s;
 }
 
 .btn-modal-x:hover {
   color: #1e4d6b;
   background-color: #e9f0f5;
+}
+
+.profile-screenshot-preview {
+  margin-top: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f9fafb;
+  text-align: center;
+}
+
+.profile-screenshot-img {
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
 }
 
 .modal--profile .stags-table-wrapper {

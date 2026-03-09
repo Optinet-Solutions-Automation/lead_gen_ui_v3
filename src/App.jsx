@@ -10,7 +10,8 @@ const MONDAY_PASSWORD        = import.meta.env.VITE_MONDAY_PASSWORD
 const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
 const N8N_ROOSTER_WEBHOOK    = import.meta.env.VITE_N8N_ROOSTER_WEBHOOK_URL
 const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
-const N8N_CONTACTS_WEBHOOK   = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
+const N8N_CONTACTS_WEBHOOK      = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
+const N8N_CHECK_STAGS_WEBHOOK   = import.meta.env.VITE_N8N_CHECK_STAGS_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 30 * 60 * 1000 // 30 minutes
@@ -104,7 +105,14 @@ function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel })
 
 const CONTACT_TYPE_OPTIONS = ['Email', 'Phone', 'LinkedIn', 'Twitter', 'Website']
 
-function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, onCollectContacts, profileRefreshKey }) {
+const toGoogleDriveImageUrl = (url) => {
+  if (!url) return null
+  const match = url.match(/\/file\/d\/([^/?]+)/)
+  if (match) return `https://lh3.googleusercontent.com/d/${match[1]}`
+  return url
+}
+
+function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, onCheckSTags, onCollectContacts, onTakeScreenshot, profileRefreshKey }) {
   const [sTags, setSTags]                           = useState([])
   const [sTagsLoading, setSTagsLoading]             = useState(false)
   const [editingCell, setEditingCell]               = useState(null)
@@ -116,6 +124,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
   const [editingContactCell, setEditingContactCell] = useState(null)
   const [newContactRows, setNewContactRows]         = useState([])
   const isCancellingContactEditRef                  = useRef(false)
+  const [showScreenshot, setShowScreenshot]         = useState(false)
 
   useEffect(() => {
     if (!profileModal) return
@@ -128,7 +137,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
       setSTagsLoading(true)
       supabase
         .from('s_tags_table')
-        .select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
+        .select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source')
         .eq('s_tag_id', profileModal.s_tag_id)
         .then(({ data, error }) => {
           setSTagsLoading(false)
@@ -159,7 +168,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     if (!profileRefreshKey) return
     if (profileModal?.s_tag_id) {
       setSTagsLoading(true)
-      supabase.from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand')
+      supabase.from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source')
         .eq('s_tag_id', profileModal.s_tag_id)
         .then(({ data, error }) => { setSTagsLoading(false); if (!error) setSTags(data ?? []) })
     }
@@ -302,11 +311,11 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
 
     const { error: insertError } = await supabase
       .from('s_tags_table')
-      .insert(newRows.map((r) => ({ s_tag_id: sTagId, s_tag: r.s_tag, brand: r.brand })))
+      .insert(newRows.map((r) => ({ s_tag_id: sTagId, s_tag: r.s_tag, brand: r.brand, status: r.status, source: r.source })))
     if (insertError) { onError('Failed to insert S-Tags.'); return }
 
     const { data: refreshData } = await supabase
-      .from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand').eq('s_tag_id', sTagId)
+      .from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source').eq('s_tag_id', sTagId)
     setSTags(refreshData ?? [])
     setNewRows([])
   }
@@ -348,7 +357,22 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--profile" onClick={(e) => e.stopPropagation()}>
-        <button className="btn-modal-x" onClick={onClose} title="Close">✕</button>
+        <div className="profile-topbar">
+          {row.screenshot_view_link && (
+            <button className="btn-modal-x" title={showScreenshot ? 'Hide Screenshot' : 'View Screenshot'} onClick={() => setShowScreenshot((v) => !v)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          )}
+          {row.screenshot_content_link && (
+            <a href={row.screenshot_content_link} download target="_blank" rel="noopener noreferrer" className="btn-modal-x" title="Download Screenshot">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </a>
+          )}
+          {row.result_type === 'PPC' && (
+            <button className="btn-modal-cancel" style={{ padding: '0.3rem 0.75rem', fontSize: '0.82rem' }} onClick={() => onTakeScreenshot(row)}>Take Screenshot</button>
+          )}
+          <button className="btn-modal-x" onClick={onClose} title="Close">✕</button>
+        </div>
         <h2 className="modal-title">Row Profile</h2>
 
         {/* ── Details grid ── */}
@@ -365,6 +389,12 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           ))}
         </div>
 
+        {showScreenshot && row.screenshot_view_link && (
+          <div className="profile-screenshot-preview">
+            <img src={toGoogleDriveImageUrl(row.screenshot_view_link)} alt="Screenshot" className="profile-screenshot-img" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+          </div>
+        )}
+
         {roosterIsSet && !isInvalid(row.status) && <hr className="profile-divider" />}
 
         {/* ── S-Tags section ── */}
@@ -380,6 +410,8 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
               }
               onCollectSTags(row)
             }}>Collect S-Tags</button>
+            <span style={{ color: '#9ca3af', fontWeight: 600 }}>›</span>
+            <button className="btn-modal-cancel" onClick={() => onCheckSTags(sTags)}>Check S-Tags</button>
           </div>
 
           {sTagsLoading ? (
@@ -392,24 +424,28 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                     <th>S-Tag ID</th>
                     <th>S-Tag <span className="field-required">*</span></th>
                     <th>Brand <span className="field-required">*</span></th>
+                    {newRows.length === 0 && <th>Status</th>}
+                    {newRows.length === 0 && <th>Source</th>}
                     <th style={{ width: '32px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {sTags.length === 0 && newRows.length === 0 ? (
-                    <tr><td colSpan={4} className="no-data">No S-Tags yet.</td></tr>
+                    <tr><td colSpan={5} className="no-data">No S-Tags yet.</td></tr>
                   ) : (
                     <>
                       {sTags.map((tag) => (
                         <tr key={tag.s_tag_autoinc_id}>
                           <td>{tag.s_tag_id}</td>
-                          {['s_tag', 'brand'].map((colKey) => {
-                            const isEditing = editingCell?.rowId === tag.s_tag_autoinc_id && editingCell?.colKey === colKey
+                          {['s_tag', 'brand', 'status', 'source'].map((colKey) => {
+                            if ((colKey === 'status' || colKey === 'source') && newRows.length > 0) return null
+                            const editable = colKey !== 'status' && colKey !== 'source'
+                            const isEditing = editable && editingCell?.rowId === tag.s_tag_autoinc_id && editingCell?.colKey === colKey
                             return (
                               <td
                                 key={colKey}
-                                className={isEditing ? 'cell--editing' : 'cell--editable'}
-                                onDoubleClick={!isEditing ? () => setEditingCell({ rowId: tag.s_tag_autoinc_id, colKey, value: tag[colKey] ?? '' }) : undefined}
+                                className={isEditing ? 'cell--editing' : editable ? 'cell--editable' : undefined}
+                                onDoubleClick={editable && !isEditing ? () => setEditingCell({ rowId: tag.s_tag_autoinc_id, colKey, value: tag[colKey] ?? '' }) : undefined}
                               >
                                 {isEditing ? (
                                   <input
@@ -468,7 +504,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           )}
 
           <div className="profile-stags-actions">
-            <button className="btn-add-row" onClick={() => setNewRows((prev) => [...prev, { s_tag: '', brand: '' }])}>+ Add S-Tag</button>
+            <button className="btn-add-row" onClick={() => setNewRows((prev) => [...prev, { s_tag: '', brand: '', status: 'Manual Input', source: null }])}>+ Add S-Tag</button>
             {newRows.length > 0 && (
               <div className="modal-actions" style={{ marginTop: '0.5rem' }}>
                 <button className="btn-modal-cancel" onClick={() => setNewRows([])}>Cancel</button>
@@ -1017,24 +1053,6 @@ function App() {
     setEditingCell(null)
   }
 
-  const handleProcessPPCClick = async () => {
-    if (selectedRows.size === 0) {
-      setModal({ phase: 'error', data: { message: 'Please select a row to process PPC for.' } })
-      return
-    }
-    if (selectedRows.size > 1) {
-      setModal({ phase: 'error', data: { message: 'Process PPC only works on one row at a time. Please select a single row.' } })
-      return
-    }
-    const row = leads.find((r) => selectedRows.has(r.id))
-    if (row.result_type !== 'PPC') {
-      setModal({ phase: 'error', data: { message: 'The selected row must have a Result Type of PPC.' } })
-      return
-    }
-    const payload = { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }
-    await sendToWebhook(N8N_PPC_WEBHOOK, payload)
-  }
-
   const handleBatchActionClick = (webhookUrl, extraFields = []) => async () => {
     if (selectedRows.size > 0) {
       const payload = leads
@@ -1133,9 +1151,6 @@ function App() {
           <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if Rooster Partner</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleMondayClick} disabled={loading}>Add Lead on Monday.com</button>
-        </div>
-        <div className="action-bar">
-          <button className="btn-action" onClick={handleProcessPPCClick} disabled={loading}>PPC - Take Screenshot</button>
         </div>
       </div>
 
@@ -1388,8 +1403,10 @@ function App() {
         onLeadUpdate={handleLeadUpdate}
         onError={(msg) => setModal({ phase: 'error', data: { message: msg } })}
         profileRefreshKey={profileRefreshKey}
+        onCheckSTags={(sTags) => sendToWebhook(N8N_CHECK_STAGS_WEBHOOK, sTags.map((t) => ({ s_tag_autoinc_id: t.s_tag_autoinc_id, s_tag_id: t.s_tag_id, s_tag: t.s_tag, brand: t.brand })))}
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
+        onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
       />
 
       <Modal modal={modal} onClose={handleModalClose} />
