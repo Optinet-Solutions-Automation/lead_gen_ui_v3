@@ -722,7 +722,9 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
 
           const hasContactId = !!row.contact_id
           const hasContactRows = contacts.length > 0
+          const hasChosenEmail = contacts.some((c) => c.contact_type === 'Email' && c.is_chosen)
           if (!hasContactId || !hasContactRows) missing.push('Contacts must be collected')
+          else if (!hasChosenEmail) missing.push('An email contact must be selected to be sent to Monday.com')
 
           if (row.is_rooster_partner !== false) missing.push('Rooster Partner must be set to FALSE')
 
@@ -742,7 +744,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                   {missing.map((m, i) => <li key={i}>{m}</li>)}
                 </ul>
               )}
-              <button className="btn-monday" disabled={!canAdd} onClick={() => onAddToMonday(row)}>Add Lead on Monday.com</button>
+              <button className="btn-monday" disabled={!canAdd} onClick={() => onAddToMonday(row, sTags, contacts)}>Add Lead on Monday.com</button>
             </div>
           )
         })()}
@@ -1511,7 +1513,21 @@ function App() {
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onSendSTagUpdate={(tag) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null }) })}
-        onAddToMonday={(row) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_MONDAY_WEBHOOK, { id: row.id, url: row.url, domain: row.domain }) })}
+        onAddToMonday={(row, sTags, contacts) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_MONDAY_WEBHOOK, {
+          id: row.id,
+          batch_id: row.batch_id ?? null,
+          keyword: row.keyword ?? null,
+          country: row.country ?? null,
+          url: row.url,
+          domain: row.domain,
+          result_type: row.result_type ?? null,
+          is_rooster_partner: row.is_rooster_partner ?? null,
+          affiliate_name: row.affiliate_name ?? null,
+          screenshot_view_link: row.screenshot_view_link ?? null,
+          screenshot_content_link: row.screenshot_content_link ?? null,
+          s_tags: sTags,
+          contact: contacts.filter((c) => c.is_chosen),
+        }) })}
       />
 
       <Modal modal={modal} onClose={handleModalClose} />
