@@ -1092,7 +1092,7 @@ function App() {
   }
 
   const handleMondayClick = () => {
-    setPasswordModal({ input: '', error: '' })
+    setPasswordModal({ input: '', error: '', onSuccess: () => handleBatchActionClick(N8N_MONDAY_WEBHOOK)() })
   }
 
   const handlePasswordConfirm = () => {
@@ -1100,8 +1100,9 @@ function App() {
       setPasswordModal((prev) => ({ ...prev, error: 'Incorrect password. Please try again.' }))
       return
     }
+    const onSuccess = passwordModal.onSuccess
     setPasswordModal(null)
-    handleBatchActionClick(N8N_MONDAY_WEBHOOK)()
+    if (onSuccess) onSuccess()
   }
 
   const handleBatchConfirm = async (batchId) => {
@@ -1429,7 +1430,7 @@ function App() {
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
-        onSendSTagUpdate={(tag) => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null })}
+        onSendSTagUpdate={(tag) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null }) })}
       />
 
       <Modal modal={modal} onClose={handleModalClose} />
