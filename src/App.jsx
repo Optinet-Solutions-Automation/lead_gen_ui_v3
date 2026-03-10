@@ -153,7 +153,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
       setContactsLoading(true)
       supabase
         .from('contact_table')
-        .select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source')
+        .select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source, is_chosen')
         .eq('contact_id', profileModal.contact_id)
         .then(({ data, error }) => {
           setContactsLoading(false)
@@ -175,7 +175,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     }
     if (profileModal?.contact_id) {
       setContactsLoading(true)
-      supabase.from('contact_table').select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source')
+      supabase.from('contact_table').select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source, is_chosen')
         .eq('contact_id', profileModal.contact_id)
         .then(({ data, error }) => { setContactsLoading(false); if (!error) setContacts(data ?? []) })
     }
@@ -241,6 +241,31 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     }
   }
 
+  const handleToggleChosenEmail = async (autoIncId) => {
+    const contact = contacts.find((c) => c.contact_autoinc_id === autoIncId)
+    if (!contact || contact.contact_type !== 'Email') return
+
+    const newValue = !contact.is_chosen
+    const contactId = contact.contact_id
+
+    // If choosing this one, unset any other chosen emails first
+    if (newValue) {
+      const otherChosen = contacts.filter((c) => c.contact_autoinc_id !== autoIncId && c.contact_type === 'Email' && c.is_chosen)
+      for (const oc of otherChosen) {
+        await supabase.from('contact_table').update({ is_chosen: false }).eq('contact_autoinc_id', oc.contact_autoinc_id)
+      }
+    }
+
+    const { error } = await supabase.from('contact_table').update({ is_chosen: newValue }).eq('contact_autoinc_id', autoIncId)
+    if (error) { onError('Failed to update chosen email.'); return }
+
+    setContacts((prev) => prev.map((c) => {
+      if (c.contact_autoinc_id === autoIncId) return { ...c, is_chosen: newValue }
+      if (newValue && c.contact_type === 'Email' && c.is_chosen) return { ...c, is_chosen: false }
+      return c
+    }))
+  }
+
   // ── contact new-row helpers ────────────────────────────
   const canSaveNewContacts = newContactRows.length > 0 && newContactRows.every((r) => {
     if (!r.contact_detail.trim() || !r.contact_type) return false
@@ -268,7 +293,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     if (insertError) { onError('Failed to insert contacts.'); return }
 
     const { data: refreshData } = await supabase
-      .from('contact_table').select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source').eq('contact_id', contactId)
+      .from('contact_table').select('contact_autoinc_id, contact_id, full_name, contact_detail, contact_type, source, is_chosen').eq('contact_id', contactId)
     setContacts(refreshData ?? [])
     setNewContactRows([])
   }
@@ -542,6 +567,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                     <th>Detail <span className="field-required">*</span></th>
                     <th>Type <span className="field-required">*</span></th>
                     {newContactRows.length === 0 && <th>Source</th>}
+                    <th>Send to Monday.com</th>
                     <th style={{ width: '32px' }}></th>
                   </tr>
                 </thead>
@@ -551,7 +577,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                   ) : (
                     <>
                       {contacts.map((contact) => (
-                        <tr key={contact.contact_autoinc_id}>
+                        <tr key={contact.contact_autoinc_id} className={contact.is_chosen ? 'contact-row--chosen' : undefined}>
                           <td>{contact.contact_id}</td>
                           {['full_name', 'contact_detail', 'contact_type', 'source'].map((colKey) => {
                             if (colKey === 'source' && newContactRows.length > 0) return null
@@ -607,6 +633,19 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                               </td>
                             )
                           })}
+                          <td className="contact-monday-cell">
+                            {contact.contact_type === 'Email' ? (
+                              <label className="contact-monday-radio">
+                                <input
+                                  type="radio"
+                                  name="chosen-email"
+                                  checked={!!contact.is_chosen}
+                                  onChange={() => handleToggleChosenEmail(contact.contact_autoinc_id)}
+                                />
+                                <span className={contact.is_chosen ? 'contact-monday-check' : 'contact-monday-x'}>{contact.is_chosen ? '✓' : '✗'}</span>
+                              </label>
+                            ) : '—'}
+                          </td>
                           <td>
                             <button className="btn-remove-row" title="Delete contact" onClick={() => handleDeleteContact(contact.contact_autoinc_id)}>✕</button>
                           </td>
