@@ -113,7 +113,7 @@ const toGoogleDriveImageUrl = (url) => {
   return url
 }
 
-function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, onCheckSTags, onCollectContacts, onTakeScreenshot, onSendSTagUpdate, profileRefreshKey }) {
+function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, onCheckSTags, onCollectContacts, onTakeScreenshot, onSendSTagUpdate, onAddToMonday, profileRefreshKey }) {
   const [sTags, setSTags]                           = useState([])
   const [sTagsLoading, setSTagsLoading]             = useState(false)
   const [editingCell, setEditingCell]               = useState(null)
@@ -661,6 +661,46 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           </div>
         </div>}
 
+        {/* ── Add to Monday.com ── */}
+        {(() => {
+          const hiddenStatuses = ['Non-affiliate Website', 'INVALID', 'Invalid', 'LEAD', 'Lead']
+          const shouldHide = hiddenStatuses.includes(row.status) || row.is_rooster_partner === true
+          if (shouldHide) return null
+
+          const missing = []
+          const hasSTagId = !!row.s_tag_id
+          const hasSTagRows = sTags.length > 0
+          const allSTagsNotFound = hasSTagRows && sTags.every((t) => t.status === 'Not Found on Monday.com')
+          if (!hasSTagId || !hasSTagRows) missing.push('S-Tags must be collected')
+          else if (!allSTagsNotFound) missing.push('All S-Tags must have status "Not Found on Monday.com"')
+
+          const hasContactId = !!row.contact_id
+          const hasContactRows = contacts.length > 0
+          if (!hasContactId || !hasContactRows) missing.push('Contacts must be collected')
+
+          if (row.is_rooster_partner !== false) missing.push('Rooster Partner must be set to FALSE')
+
+          if (row.result_type === 'PPC') {
+            if (!row.screenshot_view_link) missing.push('Screenshot view link is missing (take a screenshot first)')
+            if (!row.screenshot_content_link) missing.push('Screenshot content link is missing (take a screenshot first)')
+          }
+
+          const canAdd = missing.length === 0
+
+          return (
+            <div className="profile-section profile-monday-section">
+              <h4 className="profile-section-title">Add to Monday.com</h4>
+              <p className="profile-monday-hint">This is the final step. Once confirmed, this lead will be added to Monday.com.</p>
+              {!canAdd && (
+                <ul className="profile-monday-missing">
+                  {missing.map((m, i) => <li key={i}>{m}</li>)}
+                </ul>
+              )}
+              <button className="btn-monday" disabled={!canAdd} onClick={() => onAddToMonday(row)}>Add Lead on Monday.com</button>
+            </div>
+          )
+        })()}
+
       </div>
     </div>
 
@@ -1091,10 +1131,6 @@ function App() {
     setProfileModal((prev) => prev ? { ...prev, ...updates } : prev)
   }
 
-  const handleMondayClick = () => {
-    setPasswordModal({ input: '', error: '', onSuccess: () => handleBatchActionClick(N8N_MONDAY_WEBHOOK)() })
-  }
-
   const handlePasswordConfirm = () => {
     if (passwordModal.input !== MONDAY_PASSWORD) {
       setPasswordModal((prev) => ({ ...prev, error: 'Incorrect password. Please try again.' }))
@@ -1172,8 +1208,6 @@ function App() {
           <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Domain Duplicates</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if Rooster Partner</button>
-          <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleMondayClick} disabled={loading}>Add Lead on Monday.com</button>
         </div>
       </div>
 
@@ -1431,6 +1465,7 @@ function App() {
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onSendSTagUpdate={(tag) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null }) })}
+        onAddToMonday={(row) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_MONDAY_WEBHOOK, { id: row.id, url: row.url, domain: row.domain }) })}
       />
 
       <Modal modal={modal} onClose={handleModalClose} />
