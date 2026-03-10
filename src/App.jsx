@@ -10,8 +10,9 @@ const MONDAY_PASSWORD        = import.meta.env.VITE_MONDAY_PASSWORD
 const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
 const N8N_ROOSTER_WEBHOOK    = import.meta.env.VITE_N8N_ROOSTER_WEBHOOK_URL
 const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
-const N8N_CONTACTS_WEBHOOK      = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
-const N8N_CHECK_STAGS_WEBHOOK   = import.meta.env.VITE_N8N_CHECK_STAGS_WEBHOOK_URL
+const N8N_CONTACTS_WEBHOOK        = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
+const N8N_CHECK_STAGS_WEBHOOK     = import.meta.env.VITE_N8N_CHECK_STAGS_WEBHOOK_URL
+const N8N_STAG_UPDATE_WEBHOOK     = import.meta.env.VITE_N8N_STAG_UPDATE_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 30 * 60 * 1000 // 30 minutes
@@ -112,7 +113,7 @@ const toGoogleDriveImageUrl = (url) => {
   return url
 }
 
-function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, onCheckSTags, onCollectContacts, onTakeScreenshot, profileRefreshKey }) {
+function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectSTags, onCheckSTags, onCollectContacts, onTakeScreenshot, onSendSTagUpdate, profileRefreshKey }) {
   const [sTags, setSTags]                           = useState([])
   const [sTagsLoading, setSTagsLoading]             = useState(false)
   const [editingCell, setEditingCell]               = useState(null)
@@ -137,7 +138,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
       setSTagsLoading(true)
       supabase
         .from('s_tags_table')
-        .select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source')
+        .select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source_link, board_id, item_id')
         .eq('s_tag_id', profileModal.s_tag_id)
         .then(({ data, error }) => {
           setSTagsLoading(false)
@@ -168,7 +169,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     if (!profileRefreshKey) return
     if (profileModal?.s_tag_id) {
       setSTagsLoading(true)
-      supabase.from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source')
+      supabase.from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source_link, board_id, item_id')
         .eq('s_tag_id', profileModal.s_tag_id)
         .then(({ data, error }) => { setSTagsLoading(false); if (!error) setSTags(data ?? []) })
     }
@@ -311,11 +312,11 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
 
     const { error: insertError } = await supabase
       .from('s_tags_table')
-      .insert(newRows.map((r) => ({ s_tag_id: sTagId, s_tag: r.s_tag, brand: r.brand, status: r.status, source: r.source })))
+      .insert(newRows.map((r) => ({ s_tag_id: sTagId, s_tag: r.s_tag, brand: r.brand, status: r.status, source_link: r.source_link })))
     if (insertError) { onError('Failed to insert S-Tags.'); return }
 
     const { data: refreshData } = await supabase
-      .from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source').eq('s_tag_id', sTagId)
+      .from('s_tags_table').select('s_tag_autoinc_id, s_tag_id, s_tag, brand, status, source_link, board_id, item_id').eq('s_tag_id', sTagId)
     setSTags(refreshData ?? [])
     setNewRows([])
   }
@@ -422,6 +423,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                     {newRows.length === 0 && <th>Status</th>}
                     {newRows.length === 0 && <th>Source</th>}
                     <th style={{ width: '32px' }}></th>
+                    <th style={{ width: '32px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -432,9 +434,9 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                       {sTags.map((tag) => (
                         <tr key={tag.s_tag_autoinc_id}>
                           <td>{tag.s_tag_id}</td>
-                          {['s_tag', 'brand', 'status', 'source'].map((colKey) => {
-                            if ((colKey === 'status' || colKey === 'source') && newRows.length > 0) return null
-                            const editable = colKey !== 'status' && colKey !== 'source'
+                          {['s_tag', 'brand', 'status', 'source_link'].map((colKey) => {
+                            if ((colKey === 'status' || colKey === 'source_link') && newRows.length > 0) return null
+                            const editable = colKey !== 'status' && colKey !== 'source_link'
                             const isEditing = editable && editingCell?.rowId === tag.s_tag_autoinc_id && editingCell?.colKey === colKey
                             return (
                               <td
@@ -456,12 +458,21 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                                       if (e.key === 'Tab')    { e.preventDefault(); commitCellEdit() }
                                     }}
                                   />
-                                ) : (tag[colKey] ?? '—')}
+                                ) : colKey === 'source_link' && tag[colKey] && tag[colKey] !== 'N/A'
+                                  ? <a href={tag[colKey].startsWith('http') ? tag[colKey] : `https://${tag[colKey]}`} target="_blank" rel="noopener noreferrer" className="tb-cell-link">Click here</a>
+                                  : (tag[colKey] ?? '—')}
                               </td>
                             )
                           })}
                           <td>
                             <button className="btn-remove-row" title="Delete S-Tag" onClick={() => handleDeleteSTag(tag.s_tag_autoinc_id)}>✕</button>
+                          </td>
+                          <td>
+                            {tag.source_link && tag.source_link !== 'N/A' && (
+                              <button className="btn-remove-row" title="Send Update on Monday.com" onClick={() => onSendSTagUpdate(tag)}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -499,7 +510,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           )}
 
           <div className="profile-stags-actions">
-            <button className="btn-add-row" onClick={() => setNewRows((prev) => [...prev, { s_tag: '', brand: '', status: 'Manual Input', source: null }])}>+ Add S-Tag</button>
+            <button className="btn-add-row" onClick={() => setNewRows((prev) => [...prev, { s_tag: '', brand: '', status: 'Manual Input', source_link: 'N/A' }])}>+ Add S-Tag</button>
             {newRows.length > 0 && (
               <div className="modal-actions" style={{ marginTop: '0.5rem' }}>
                 <button className="btn-modal-cancel" onClick={() => setNewRows([])}>Cancel</button>
@@ -1418,6 +1429,7 @@ function App() {
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
+        onSendSTagUpdate={(tag) => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null })}
       />
 
       <Modal modal={modal} onClose={handleModalClose} />
