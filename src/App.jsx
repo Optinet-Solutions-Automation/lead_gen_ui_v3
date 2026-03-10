@@ -596,7 +596,14 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                                       }}
                                     />
                                   )
-                                ) : (contact[colKey] ?? '—')}
+                                ) : colKey === 'contact_detail' && contact[colKey] ? (() => {
+                                  const val = contact[colKey]
+                                  const type = contact.contact_type
+                                  if (type === 'Email') return <a href={`mailto:${val}`} className="tb-cell-link">{val}</a>
+                                  if (type === 'Phone') return <a href={`tel:${val}`} className="tb-cell-link">{val}</a>
+                                  if (type === 'LinkedIn' || type === 'Twitter' || type === 'Website') return <a href={val.startsWith('http') ? val : `https://${val}`} target="_blank" rel="noopener noreferrer" className="tb-cell-link">{val}</a>
+                                  return val
+                                })() : (contact[colKey] ?? '—')}
                               </td>
                             )
                           })}
