@@ -13,6 +13,7 @@ const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
 const N8N_CONTACTS_WEBHOOK        = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
 const N8N_CHECK_STAGS_WEBHOOK     = import.meta.env.VITE_N8N_CHECK_STAGS_WEBHOOK_URL
 const N8N_STAG_UPDATE_WEBHOOK     = import.meta.env.VITE_N8N_STAG_UPDATE_WEBHOOK_URL
+// const N8N_AFFILIATES_WEBHOOK   = import.meta.env.VITE_N8N_AFFILIATES_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 30 * 60 * 1000 // 30 minutes
@@ -246,7 +247,6 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     if (!contact || contact.contact_type !== 'Email') return
 
     const newValue = !contact.is_chosen
-    const contactId = contact.contact_id
 
     // If choosing this one, unset any other chosen emails first
     if (newValue) {

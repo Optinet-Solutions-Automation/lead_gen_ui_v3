@@ -1134,3 +1134,86 @@ td.cell--editing {
 .contact-row--chosen td {
   background: rgba(22, 163, 74, 0.07);
 }
+
+/* ── Responsive ───────────────────────────────────────── */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .search-bar {
+    flex-wrap: wrap;
+  }
+
+  .input-keyword {
+    flex: 1 1 100%;
+  }
+
+  .select-country {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .input-search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .search-divider {
+    display: none;
+  }
+
+  .btn-submit {
+    width: 100%;
+  }
+
+  .action-bar {
+    flex-wrap: wrap;
+  }
+
+  .table-wrapper {
+    max-height: calc(100vh - 320px);
+  }
+
+  .modal {
+    width: 95vw;
+    padding: 1.25rem;
+  }
+
+  .modal--profile {
+    width: 95vw;
+    padding: 1.25rem;
+  }
+
+  .profile-topbar {
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+
+  .profile-grid {
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .title {
+    font-size: 1.25rem;
+  }
+
+  .action-bar {
+    gap: 0.35rem;
+  }
+
+  .btn-action {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .table-wrapper {
+    max-height: calc(100vh - 360px);
+  }
+
+  .modal--profile {
+    padding: 1rem;
+  }
+}

@@ -30,3 +30,17 @@
   color: #ffffff;
   border-bottom-color: #4da3cc;
 }
+
+/* ── Responsive ───────────────────────────────────────── */
+@media (max-width: 480px) {
+  .navbar-inner {
+    padding: 0 0.75rem;
+    overflow-x: auto;
+  }
+
+  .navbar-link {
+    padding: 0.75rem 0.9rem;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+}
