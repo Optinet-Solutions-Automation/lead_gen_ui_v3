@@ -106,7 +106,10 @@
 }
 
 .tb-table-wrapper {
-  overflow-x: auto;
+  overflow-x: scroll;
+  overflow-y: scroll;
+  max-height: calc(100vh - 200px);
+  scrollbar-gutter: stable;
 }
 
 .tb-table {
@@ -116,6 +119,12 @@
 }
 
 /* Header */
+.tb-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
 .tb-table thead tr {
   background: #f5f6f8;
   border-bottom: 1px solid #e6e9ef;

@@ -184,7 +184,10 @@
 }
 
 .table-wrapper {
-  overflow-x: auto;
+  overflow-x: scroll;
+  overflow-y: scroll;
+  max-height: calc(100vh - 280px);
+  scrollbar-gutter: stable;
 }
 
 .leads-table {
@@ -194,6 +197,12 @@
 }
 
 /* Header */
+.leads-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
 .leads-table thead tr {
   background-color: #1e4d6b;
 }
@@ -605,6 +614,7 @@ td.cell--editing {
 .stags-table-wrapper {
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: scroll;
   margin: 1.25rem 0;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
