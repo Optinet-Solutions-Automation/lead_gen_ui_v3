@@ -1050,8 +1050,15 @@ function App() {
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [])
 
+  const canSubmit = keyword.trim() !== '' && country !== ''
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    if (!keyword.trim() || !country) {
+      setModal({ phase: 'error', data: { message: 'Please enter a keyword and select a country.' } })
+      return
+    }
 
     const selectedCountry = countries.find((c) => c.id === country)
 
@@ -1235,7 +1242,7 @@ function App() {
             ))}
           </select>
 
-          <button type="submit" className="btn-submit" disabled={loading}>
+          <button type="submit" className="btn-submit" disabled={loading || !canSubmit}>
             {loading ? 'Submitting...' : 'Submit'}
           </button>
 
