@@ -13,7 +13,7 @@ const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
 const N8N_CONTACTS_WEBHOOK        = import.meta.env.VITE_N8N_CONTACTS_WEBHOOK_URL
 const N8N_CHECK_STAGS_WEBHOOK     = import.meta.env.VITE_N8N_CHECK_STAGS_WEBHOOK_URL
 const N8N_STAG_UPDATE_WEBHOOK     = import.meta.env.VITE_N8N_STAG_UPDATE_WEBHOOK_URL
-// const N8N_AFFILIATES_WEBHOOK   = import.meta.env.VITE_N8N_AFFILIATES_WEBHOOK_URL
+const N8N_AFFILIATES_WEBHOOK      = import.meta.env.VITE_N8N_AFFILIATES_WEBHOOK_URL
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS  = 30 * 60 * 1000 // 30 minutes
@@ -888,6 +888,7 @@ function App() {
   const [modal, setModal]                   = useState(null)
   const [batchModal, setBatchModal]         = useState(null)
   const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
+  const [pendingExtraFields, setPendingExtraFields] = useState([])
   const [passwordModal, setPasswordModal] = useState(null)
   const [profileModal, setProfileModal] = useState(null)
   const [profileRefreshKey, setProfileRefreshKey] = useState(0)
@@ -1119,8 +1120,9 @@ function App() {
     }
   }
 
-  const openBatchModal = async (webhookUrl) => {
+  const openBatchModal = async (webhookUrl, extraFields = []) => {
     setPendingWebhookUrl(webhookUrl)
+    setPendingExtraFields(extraFields)
     setBatchModal({ phase: 'loading' })
 
     const { data, error } = await supabase
@@ -1178,7 +1180,7 @@ function App() {
       await sendToWebhook(webhookUrl, payload)
       return
     }
-    await openBatchModal(webhookUrl)
+    await openBatchModal(webhookUrl, extraFields)
   }
 
   const handleLeadUpdate = (rowId, updates) => {
@@ -1199,9 +1201,10 @@ function App() {
   const handleBatchConfirm = async (batchId) => {
     setBatchModal(null)
 
+    const selectFields = ['id', 'url', 'domain', 'status', ...pendingExtraFields].join(', ')
     const { data, error } = await supabase
       .from('google_lead_gen_table')
-      .select('id, url, domain, status')
+      .select(selectFields)
       .eq('batch_id', batchId)
 
     if (error) {
@@ -1211,7 +1214,7 @@ function App() {
 
     const payload = data
       .filter((r) => !isInvalid(r.status))
-      .map((r) => ({ id: r.id, url: r.url, domain: r.domain }))
+      .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(pendingExtraFields.map((f) => [f, r[f] ?? null])) }))
     await sendToWebhook(pendingWebhookUrl, payload)
   }
 
@@ -1258,7 +1261,7 @@ function App() {
         </form>
 
         <div className="action-bar">
-          <button className="btn-action" disabled>Check for Affiliates</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_AFFILIATES_WEBHOOK, ['country'])} disabled={loading}>Check for Affiliates</button>
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Domain Duplicates</button>
           <span className="action-sep">›</span>
