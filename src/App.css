@@ -393,6 +393,15 @@
   background-color: #e8f0f7;
 }
 
+.leads-table tbody tr.row-notice td {
+  background-color: #fed7aa;
+  color: #7c2d12;
+}
+
+.leads-table tbody tr.row-notice:hover td {
+  background-color: #fdba74;
+}
+
 .leads-table .col-checkbox {
   width: 40px;
   min-width: 40px;

@@ -30,7 +30,7 @@ const TABLE_COLUMNS = [
   { key: 's_tag_id',           label: 'S-Tag',           noSort: true, hasFilter: true, filterType: 'presence' },
   { key: 'contact_id',         label: 'Contact',         noSort: true, hasFilter: true, filterType: 'presence' },
   { key: 'affiliate_name',     label: 'Affiliate Name',  hasFilter: true, filterType: 'text' },
-  { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterOptions: ['Not Set', 'INVALID'] },
+  { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterOptions: ['Not Set', 'INVALID', 'Affiliate Website', 'Non-affiliate Website'] },
   { key: 'remarks',            label: 'Remarks',         noSort: true },
 ]
 
@@ -54,7 +54,7 @@ const EDITABLE_COLS = {
   },
 }
 
-const isInvalid = (status) => status === 'INVALID' || status === 'Invalid'
+const isInvalid = (status) => status === 'INVALID' || status === 'Invalid' || status === 'Non-affiliate Website'
 const isLead    = (status) => status === 'LEAD'    || status === 'Lead'
 
 
@@ -709,7 +709,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
 
         {/* ── Add to Monday.com ── */}
         {(() => {
-          const hiddenStatuses = ['Non-affiliate Website', 'INVALID', 'Invalid', 'LEAD', 'Lead']
+          const hiddenStatuses = [null, undefined, 'Non-affiliate Website', 'INVALID', 'Invalid', 'LEAD', 'Lead']
           const shouldHide = hiddenStatuses.includes(row.status) || row.is_rooster_partner === true
           if (shouldHide) return null
 
@@ -1374,7 +1374,7 @@ function App() {
                 </tr>
               ) : (
                 sortedLeads.map((row) => (
-                  <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', isInvalid(row.status) ? 'row-invalid' : '', isLead(row.status) ? 'row-lead' : ''].filter(Boolean).join(' ')}>
+                  <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', isInvalid(row.status) ? 'row-invalid' : '', isLead(row.status) ? 'row-lead' : '', row.remarks?.includes('NOTICE: ') ? 'row-notice' : ''].filter(Boolean).join(' ')}>
                     <td className="col-checkbox">
                       <input
                         type="checkbox"
@@ -1411,14 +1411,14 @@ function App() {
                       }
 
                       const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined
-                      const className = [baseClass, isEditing ? 'cell--editing' : (editConf && !isInvalid(row.status)) ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
+                      const className = [baseClass, isEditing ? 'cell--editing' : editConf ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
 
                       return (
                         <td
                           key={col.key}
                           className={className}
                           title={isEditing ? undefined : String(value)}
-                          onDoubleClick={editConf && !isEditing && !isInvalid(row.status) ? () => setEditingCell({ rowId: row.id, colKey: col.key, value: getInitialEditValue(col.key, raw) }) : undefined}
+                          onDoubleClick={editConf && !isEditing ? () => setEditingCell({ rowId: row.id, colKey: col.key, value: getInitialEditValue(col.key, raw) }) : undefined}
                         >
                           {isEditing ? (
                             editConf.type === 'dropdown' ? (
