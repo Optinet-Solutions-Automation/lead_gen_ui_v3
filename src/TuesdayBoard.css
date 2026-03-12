@@ -323,6 +323,8 @@ th.tb-col-view {
   padding: 3rem 1rem !important;
   font-size: 0.9rem;
   max-width: none !important;
+  overflow: visible !important;
+  white-space: normal !important;
 }
 
 /* ── Responsive ───────────────────────────────────────── */

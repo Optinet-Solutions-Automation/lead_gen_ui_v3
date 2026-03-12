@@ -178,11 +178,11 @@ export default function TuesdayBoard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={board.columns.length + 1} className="tb-no-data">Loading...</td>
+                    <td colSpan={board.columns.length + 2} className="tb-no-data">Loading...</td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={board.columns.length + 1} className="tb-no-data">No data found.</td>
+                    <td colSpan={board.columns.length + 2} className="tb-no-data">No data found.</td>
                   </tr>
                 ) : (
                   rows.map((row, i) => (

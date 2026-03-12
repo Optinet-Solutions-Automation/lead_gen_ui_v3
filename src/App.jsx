@@ -453,7 +453,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                 </thead>
                 <tbody>
                   {sTags.length === 0 && newRows.length === 0 ? (
-                    <tr><td colSpan={5} className="no-data">No S-Tags yet.</td></tr>
+                    <tr><td colSpan={7} className="no-data">No S-Tags yet.</td></tr>
                   ) : (
                     <>
                       {sTags.map((tag) => (
@@ -573,7 +573,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                 </thead>
                 <tbody>
                   {contacts.length === 0 && newContactRows.length === 0 ? (
-                    <tr><td colSpan={6} className="no-data">No contacts yet.</td></tr>
+                    <tr><td colSpan={7} className="no-data">No contacts yet.</td></tr>
                   ) : (
                     <>
                       {contacts.map((contact) => (
@@ -1362,13 +1362,13 @@ function App() {
             <tbody>
               {tableLoading ? (
                 <tr>
-                  <td colSpan={TABLE_COLUMNS.length + 1} className="no-data">
+                  <td colSpan={TABLE_COLUMNS.length + 2} className="no-data">
                     Loading...
                   </td>
                 </tr>
               ) : sortedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={TABLE_COLUMNS.length + 1} className="no-data">
+                  <td colSpan={TABLE_COLUMNS.length + 2} className="no-data">
                     {searchTerm.length >= 3 ? `No results for "${searchTerm}".` : 'No data to display.'}
                   </td>
                 </tr>

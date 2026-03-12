@@ -381,12 +381,12 @@
 }
 
 .leads-table tbody tr.row-lead td {
-  color: #166534;
-  background-color: #f0fdf4;
+  color: #14532d;
+  background-color: #bbf7d0;
 }
 
 .leads-table tbody tr.row-lead:hover td {
-  background-color: #dcfce7;
+  background-color: #86efac;
 }
 
 .leads-table tbody tr.row-selected {
@@ -476,6 +476,9 @@
   color: #9ca3af;
   padding: 3rem 1rem !important;
   font-size: 0.9rem;
+  max-width: none !important;
+  overflow: visible !important;
+  white-space: normal !important;
 }
 
 /* ── Table hint ──────────────────────────────────────── */
