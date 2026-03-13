@@ -611,6 +611,7 @@ td.cell--editing {
   max-width: 440px;
   text-align: center;
   animation: slideUp 0.2s ease;
+  cursor: default;
 }
 
 @keyframes slideUp {
