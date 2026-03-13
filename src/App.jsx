@@ -789,8 +789,8 @@ function BatchSelectModal({ batchModal, onSelectChange, onConfirm, onCancel }) {
 
         {batchModal.phase === 'select' && (
           <>
-            <h2 className="modal-title">Check for Domain Duplicates</h2>
-            <p className="modal-message">Select the batch ID you want to run domain duplicate checking for.</p>
+            <h2 className="modal-title">{batchModal.title}</h2>
+            <p className="modal-message">{batchModal.desc}</p>
             <select
               className="select-batch"
               value={batchModal.selected}
@@ -1120,10 +1120,17 @@ function App() {
     }
   }
 
+  const BATCH_LABELS = {
+    [N8N_AFFILIATES_WEBHOOK]:  { title: 'Check for Affiliates',        desc: 'Select the batch ID you want to run affiliate checking for.' },
+    [N8N_DUPLICATES_WEBHOOK]:  { title: 'Check for Domain Duplicates', desc: 'Select the batch ID you want to run domain duplicate checking for.' },
+    [N8N_ROOSTER_WEBHOOK]:     { title: 'Check if Rooster Partner',    desc: 'Select the batch ID you want to run Rooster Partner checking for.' },
+  }
+
   const openBatchModal = async (webhookUrl, extraFields = []) => {
     setPendingWebhookUrl(webhookUrl)
     setPendingExtraFields(extraFields)
-    setBatchModal({ phase: 'loading' })
+    const labels = BATCH_LABELS[webhookUrl] || { title: 'Select Batch', desc: 'Select the batch ID to proceed.' }
+    setBatchModal({ phase: 'loading', ...labels })
 
     const { data, error } = await supabase
       .from('google_lead_gen_table')
@@ -1145,7 +1152,7 @@ function App() {
       return
     }
 
-    setBatchModal({ phase: 'select', batchIds, selected: batchIds[0] })
+    setBatchModal((prev) => ({ ...prev, phase: 'select', batchIds, selected: batchIds[0] }))
   }
 
   const commitCellEdit = async () => {
