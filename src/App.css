@@ -490,46 +490,14 @@
   background-color: #f5f8fb;
 }
 
-.leads-table tbody tr.row-invalid td {
-  color: #9ca3af;
-}
-
-.leads-table tbody tr.row-invalid td .result-type-badge,
-.leads-table tbody tr.row-invalid td .stag-indicator,
-.leads-table tbody tr.row-invalid td .country-cell {
-  text-decoration: none;
-}
-
-.leads-table tbody tr.row-invalid td .country-cell img {
-  opacity: 0.35;
-}
-
 .country-cell {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.leads-table tbody tr.row-lead td {
-  color: #14532d;
-  background-color: #bbf7d0;
-}
-
-.leads-table tbody tr.row-lead:hover td {
-  background-color: #86efac;
-}
-
 .leads-table tbody tr.row-selected {
   background-color: #e8f0f7;
-}
-
-.leads-table tbody tr.row-notice td {
-  background-color: #fed7aa;
-  color: #7c2d12;
-}
-
-.leads-table tbody tr.row-notice:hover td {
-  background-color: #fdba74;
 }
 
 .leads-table .col-checkbox {

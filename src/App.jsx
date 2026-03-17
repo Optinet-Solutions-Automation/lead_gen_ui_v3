@@ -31,7 +31,7 @@ const TABLE_COLUMNS = [
   { key: 'is_rooster_partner', label: 'Is Rooster Partner',     noSort: true, hasFilter: true, filterType: 'boolean' },
   { key: 'contact_id',         label: 'Has Contact Details',    noSort: true, hasFilter: true, filterType: 'presence' },
   { key: 's_tag_id',           label: 'Has S-Tags',             noSort: true, hasFilter: true, filterType: 'presence' },
-  { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterOptions: ['Not Set', 'INVALID', 'Affiliate Website', 'Non-affiliate Website'] },
+  { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterType: 'text' },
   { key: 'remarks',            label: 'Remarks',         noSort: true },
 ]
 
@@ -59,15 +59,6 @@ const EDITABLE_COLS = {
   },
   affiliate_name: { type: 'text' },
   batch_id:       { type: 'text' },
-  status: {
-    type: 'dropdown',
-    options: [
-      { label: 'Affiliate Website',     value: 'Affiliate Website'     },
-      { label: 'Non-affiliate Website', value: 'Non-affiliate Website' },
-      { label: 'Invalid',               value: 'Invalid'               },
-      { label: 'Lead',                  value: 'Lead'                  },
-    ],
-  },
 }
 
 const PAGE_SIZE = 50
@@ -128,8 +119,6 @@ const buildOrPart = (col, fr) => {
   return `${column}.eq.${value}`
 }
 
-const isInvalid = (status) => status === 'INVALID' || status === 'Invalid' || status === 'Non-affiliate Website'
-const isLead    = (status) => status === 'LEAD'    || status === 'Lead'
 
 
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
@@ -490,10 +479,10 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           ))}
         </div>
 
-        {roosterIsSet && !isInvalid(row.status) && <hr className="profile-divider" />}
+        {roosterIsSet && <hr className="profile-divider" />}
 
         {/* ── S-Tags section ── */}
-        {roosterIsSet && !isInvalid(row.status) && <div className="profile-section">
+        {roosterIsSet && <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">S-Tags</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -619,10 +608,10 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           </div>
         </div>}
 
-        {roosterIsFalse && !isInvalid(row.status) && <hr className="profile-divider" />}
+        {roosterIsFalse && <hr className="profile-divider" />}
 
         {/* ── Contacts section ── */}
-        {roosterIsFalse && !isInvalid(row.status) && <div className="profile-section">
+        {roosterIsFalse && <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">Contacts</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -783,9 +772,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
 
         {/* ── Add to Monday.com ── */}
         {(() => {
-          const hiddenStatuses = [null, undefined, 'Non-affiliate Website', 'INVALID', 'Invalid', 'LEAD', 'Lead']
-          const shouldHide = hiddenStatuses.includes(row.status) || row.is_rooster_partner === true
-          if (shouldHide) return null
+          if (row.is_rooster_partner === true) return null
 
           const missing = []
           const hasSTagId = !!row.s_tag_id
@@ -1155,7 +1142,7 @@ function App() {
   const activeFiltersKey = useMemo(() => JSON.stringify(activeFilterRows), [activeFilterRows])
   const activeSortsKey   = useMemo(() => JSON.stringify(activeSortRows),   [activeSortRows])
 
-  const selectableLeads = leads.filter((r) => !isInvalid(r.status))
+  const selectableLeads = leads
   const allSelected  = selectableLeads.length > 0 && selectedRows.size === selectableLeads.length
   const someSelected = selectedRows.size > 0 && !allSelected
 
@@ -1351,7 +1338,7 @@ function App() {
   const handleBatchActionClick = (webhookUrl, extraFields = []) => async () => {
     if (selectedRows.size > 0) {
       const payload = leads
-        .filter((r) => selectedRows.has(r.id) && !isInvalid(r.status))
+        .filter((r) => selectedRows.has(r.id))
         .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(extraFields.map((f) => [f, r[f] ?? null])) }))
       await sendToWebhook(webhookUrl, payload)
       return
@@ -1445,7 +1432,6 @@ function App() {
     }
 
     const payload = data
-      .filter((r) => !isInvalid(r.status))
       .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(pendingExtraFields.map((f) => [f, r[f] ?? null])) }))
     await sendToWebhook(pendingWebhookUrl, payload)
   }
@@ -1673,13 +1659,13 @@ function App() {
                 </tr>
               ) : (
                 leads.map((row) => (
-                  <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', isInvalid(row.status) ? 'row-invalid' : '', isLead(row.status) ? 'row-lead' : '', row.remarks?.includes('NOTICE: ') ? 'row-notice' : ''].filter(Boolean).join(' ')}>
+                  <tr key={row.id} className={selectedRows.has(row.id) ? 'row-selected' : undefined}>
                     <td className="col-checkbox">
                       <input
                         type="checkbox"
                         checked={selectedRows.has(row.id)}
                         onChange={() => toggleRow(row.id)}
-                        disabled={isInvalid(row.status)}
+                        disabled={false}
                       />
                     </td>
                     <td className="col-view">
@@ -1705,6 +1691,8 @@ function App() {
                         } else {
                           value = '?'
                         }
+                      } else if (col.key === 'status' || col.key === 'remarks') {
+                        value = raw ?? ''
                       } else {
                         value = raw ?? '?'
                       }
