@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 import { supabase } from './supabase'
 
@@ -20,21 +20,36 @@ const POLL_TIMEOUT_MS  = 30 * 60 * 1000 // 30 minutes
 
 const TABLE_COLUMNS = [
   { key: 'id',                 label: 'ID' },
-  { key: 'batch_id',           label: 'Batch ID',        hasFilter: true },
+  { key: 'batch_id',           label: 'Batch ID',        hasFilter: true, filterType: 'exact' },
   { key: 'keyword',            label: 'Keyword',         hasFilter: true, filterType: 'text' },
   { key: 'country',            label: 'Country',         noSort: true, hasFilter: true },
   { key: 'url',                label: 'Full URL',        hasFilter: true, filterType: 'text' },
   { key: 'domain',             label: 'Clean Domain',    hasFilter: true, filterType: 'text' },
-  { key: 'result_type',        label: 'Result Type',     noSort: true, hasFilter: true },
-  { key: 'is_rooster_partner', label: 'Rooster Partner', noSort: true, hasFilter: true, filterType: 'boolean' },
-  { key: 's_tag_id',           label: 'S-Tag',           noSort: true, hasFilter: true, filterType: 'presence' },
-  { key: 'contact_id',         label: 'Contact',         noSort: true, hasFilter: true, filterType: 'presence' },
-  { key: 'affiliate_name',     label: 'Affiliate Name',  hasFilter: true, filterType: 'text' },
+  { key: 'result_type',        label: 'Result Type',                        noSort: true, hasFilter: true },
+  { key: 'is_affiliate',       label: 'Is an Affiliate',        noSort: true, hasFilter: true, filterType: 'boolean' },
+  { key: 'is_on_monday',       label: 'Is Existing on Monday',  noSort: true, hasFilter: true, filterType: 'boolean' },
+  { key: 'is_rooster_partner', label: 'Is Rooster Partner',     noSort: true, hasFilter: true, filterType: 'boolean' },
+  { key: 'contact_id',         label: 'Has Contact Details',    noSort: true, hasFilter: true, filterType: 'presence' },
+  { key: 's_tag_id',           label: 'Has S-Tags',             noSort: true, hasFilter: true, filterType: 'presence' },
   { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterOptions: ['Not Set', 'INVALID', 'Affiliate Website', 'Non-affiliate Website'] },
   { key: 'remarks',            label: 'Remarks',         noSort: true },
 ]
 
 const EDITABLE_COLS = {
+  is_affiliate: {
+    type: 'dropdown',
+    options: [
+      { label: 'Yes', value: true  },
+      { label: 'No',  value: false },
+    ],
+  },
+  is_on_monday: {
+    type: 'dropdown',
+    options: [
+      { label: 'Yes', value: true  },
+      { label: 'No',  value: false },
+    ],
+  },
   is_rooster_partner: {
     type: 'dropdown',
     options: [
@@ -43,6 +58,7 @@ const EDITABLE_COLS = {
     ],
   },
   affiliate_name: { type: 'text' },
+  batch_id:       { type: 'text' },
   status: {
     type: 'dropdown',
     options: [
@@ -52,6 +68,64 @@ const EDITABLE_COLS = {
       { label: 'Lead',                  value: 'Lead'                  },
     ],
   },
+}
+
+const PAGE_SIZE = 50
+
+// Apply a single filter row to a Supabase query (AND mode)
+const applyFilterToQuery = (q, col, fr) => {
+  const { column, condition, value } = fr
+  if (col?.filterType === 'text') {
+    switch (condition) {
+      case 'contains':         return q.ilike(column, `%${value}%`)
+      case 'does not contain': return q.not(column, 'ilike', `%${value}%`)
+      case 'is':               return q.ilike(column, value)
+      case 'is not':           return q.not(column, 'ilike', value)
+      case 'starts with':      return q.ilike(column, `${value}%`)
+      case 'ends with':        return q.ilike(column, `%${value}`)
+      default:                 return q
+    }
+  }
+  if (col?.filterType === 'boolean') {
+    if (value === 'Yes')     return q.eq(column, true)
+    if (value === 'No')      return q.eq(column, false)
+    if (value === 'Not Set') return q.is(column, null)
+    return q
+  }
+  if (col?.filterType === 'presence') {
+    if (value === 'Yes') return q.not(column, 'is', null)
+    if (value === 'No')  return q.is(column, null)
+    return q
+  }
+  if (col?.filterType === 'exact') return q.eq(column, value)
+  if (value === 'Not Set') return q.is(column, null)
+  return q.ilike(column, value)
+}
+
+// Build a single OR part string for Supabase .or()
+const buildOrPart = (col, fr) => {
+  const { column, condition, value } = fr
+  if (col?.filterType === 'text') {
+    switch (condition) {
+      case 'contains':    return `${column}.ilike.%${value}%`
+      case 'is':          return `${column}.eq.${value}`
+      case 'starts with': return `${column}.ilike.${value}%`
+      case 'ends with':   return `${column}.ilike.%${value}`
+      default:            return null
+    }
+  }
+  if (col?.filterType === 'boolean') {
+    if (value === 'Yes') return `${column}.eq.true`
+    if (value === 'No')  return `${column}.eq.false`
+    return null
+  }
+  if (col?.filterType === 'presence') {
+    if (value === 'Yes') return `not.${column}.is.null`
+    if (value === 'No')  return `${column}.is.null`
+    return null
+  }
+  if (value === 'Not Set') return `${column}.is.null`
+  return `${column}.eq.${value}`
 }
 
 const isInvalid = (status) => status === 'INVALID' || status === 'Invalid' || status === 'Non-affiliate Website'
@@ -485,7 +559,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                                   />
                                 ) : colKey === 'source_link' && tag[colKey] && tag[colKey] !== 'N/A'
                                   ? <a href={tag[colKey].startsWith('http') ? tag[colKey] : `https://${tag[colKey]}`} target="_blank" rel="noopener noreferrer" className="tb-cell-link">Click here</a>
-                                  : (tag[colKey] ?? '—')}
+                                  : (tag[colKey] ? tag[colKey] : <span className="stag-indicator stag-indicator--unknown">?</span>)}
                               </td>
                             )
                           })}
@@ -629,7 +703,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                                   if (type === 'Phone') return <a href={`tel:${val}`} className="tb-cell-link">{val}</a>
                                   if (type === 'LinkedIn' || type === 'Twitter' || type === 'Website') return <a href={val.startsWith('http') ? val : `https://${val}`} target="_blank" rel="noopener noreferrer" className="tb-cell-link">{val}</a>
                                   return val
-                                })() : (contact[colKey] ?? '—')}
+                                })() : (contact[colKey] ? contact[colKey] : <span className="stag-indicator stag-indicator--unknown">?</span>)}
                               </td>
                             )
                           })}
@@ -644,7 +718,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
                                 />
                                 <span className={contact.is_chosen ? 'contact-monday-check' : 'contact-monday-x'}>{contact.is_chosen ? '✓' : '✗'}</span>
                               </label>
-                            ) : '—'}
+                            ) : <span className="stag-indicator stag-indicator--unknown">?</span>}
                           </td>
                           <td>
                             <button className="btn-remove-row" title="Delete contact" onClick={() => handleDeleteContact(contact.contact_autoinc_id)}>✕</button>
@@ -893,15 +967,29 @@ function App() {
   const [profileModal, setProfileModal] = useState(null)
   const [profileRefreshKey, setProfileRefreshKey] = useState(0)
   const [editingCell, setEditingCell] = useState(null) // { rowId, colKey, value }
-  const [sortCol, setSortCol] = useState(null)  // column key
-  const [sortDir, setSortDir] = useState(null)  // 'asc' | 'desc' | null
-  const [filterOpen, setFilterOpen] = useState(null)  // column key of open filter popup, or null
-  const [activeFilters, setActiveFilters] = useState({})  // { [colKey]: Set }
-  const [textFilters, setTextFilters] = useState({})      // { [colKey]: string } — committed on Enter
-  const [textFilterDrafts, setTextFilterDrafts] = useState({})  // { [colKey]: string } — live input value
-  const filterPopupRef = useRef(null)
+  const [addNewModal, setAddNewModal]       = useState(null) // null | { batchId, keyword, country, url, domain, resultType, saving }
+  const [deleteConfirm, setDeleteConfirm]   = useState(false)
+  const [deleting, setDeleting]             = useState(false)
+  const [dynamicFilterOptions, setDynamicFilterOptions] = useState({})
+  const [filterRows, setFilterRows]         = useState([])  // [{ id, column, condition, value }]
+  const [sortRows, setSortRows]             = useState([])  // [{ id, column, direction }]
+  const [filterConnector, setFilterConnector] = useState('AND')
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false)
+  const [sortPanelOpen, setSortPanelOpen]     = useState(false)
+  const filterPanelRef = useRef(null)
+  const sortPanelRef   = useRef(null)
   const pollRef            = useRef(null)
   const isCancellingEditRef = useRef(false)
+  const [hasMore, setHasMore]           = useState(true)
+  const [loadingMore, setLoadingMore]   = useState(false)
+  const offsetRef       = useRef(0)
+  const sentinelRef     = useRef(null)
+  const loadingMoreRef  = useRef(false)
+  const hasMoreRef      = useRef(true)
+  const filterRowsRef   = useRef([])
+  const sortRowsRef     = useRef([])
+  const filterConnectorRef = useRef('AND')
+  const searchRef       = useRef('')
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -935,101 +1023,139 @@ function App() {
     }, POLL_INTERVAL_MS)
   }
 
-  const fetchLeads = async () => {
-    setTableLoading(true)
-    setSelectedRows(new Set())
-    const { data, error } = await supabase
-      .from('google_lead_gen_table')
-      .select('*')
-      .order('id', { ascending: false })
-    if (!error) {
-      setLeads(data ?? [])
+  // Keep refs in sync with state so fetchLeads (stable callback) always reads latest values
+  useEffect(() => { filterRowsRef.current = filterRows },       [filterRows])
+  useEffect(() => { sortRowsRef.current = sortRows },           [sortRows])
+  useEffect(() => { filterConnectorRef.current = filterConnector }, [filterConnector])
+  useEffect(() => { searchRef.current = search },               [search])
+
+  const fetchLeads = useCallback(async (reset = true) => {
+    const from = reset ? 0 : offsetRef.current
+
+    if (reset) {
+      setTableLoading(true)
+      setSelectedRows(new Set())
+      offsetRef.current = 0
+      setHasMore(true)
+      hasMoreRef.current = true
+    } else {
+      if (loadingMoreRef.current || !hasMoreRef.current) return
+      setLoadingMore(true)
+      loadingMoreRef.current = true
+    }
+
+    const validFilters = filterRowsRef.current.filter((fr) => fr.column && fr.value)
+    const validSorts   = sortRowsRef.current.filter((sr) => sr.column)
+    const connector    = filterConnectorRef.current
+    const term         = searchRef.current.trim()
+
+    let q = supabase.from('google_lead_gen_table').select('*').range(from, from + PAGE_SIZE - 1)
+
+    // Apply filters
+    if (validFilters.length > 0) {
+      if (connector === 'AND') {
+        validFilters.forEach((fr) => {
+          const col = TABLE_COLUMNS.find((c) => c.key === fr.column)
+          q = applyFilterToQuery(q, col, fr)
+        })
+      } else {
+        const parts = validFilters.map((fr) => {
+          const col = TABLE_COLUMNS.find((c) => c.key === fr.column)
+          return buildOrPart(col, fr)
+        }).filter(Boolean)
+        if (parts.length > 0) q = q.or(parts.join(','))
+      }
+    }
+
+    // Apply search across key columns
+    if (term.length >= 3) {
+      const cols = ['domain', 'keyword', 'url', 'status', 'batch_id', 'affiliate_name']
+      q = q.or(cols.map((c) => `${c}.ilike.%${term}%`).join(','))
+    }
+
+    // Apply sorts
+    if (validSorts.length > 0) {
+      validSorts.forEach((sr) => q = q.order(sr.column, { ascending: sr.direction === 'asc' }))
+    } else {
+      q = q.order('id', { ascending: false })
+    }
+
+    const { data, error } = await q
+    const rows = data ?? []
+
+    if (reset) {
+      setLeads(rows)
       setProfileModal((prev) => {
         if (!prev) return null
-        const fresh = (data ?? []).find((r) => r.id === prev.id)
+        const fresh = rows.find((r) => r.id === prev.id)
         return fresh ? { ...prev, ...fresh } : prev
       })
+      setTableLoading(false)
+    } else {
+      setLeads((prev) => [...prev, ...rows])
+      setLoadingMore(false)
+      loadingMoreRef.current = false
     }
-    setTableLoading(false)
-  }
 
-  // ── Click-outside to close filter popup ─────────────────
+    if (error) console.error('fetchLeads error:', error)
+
+    offsetRef.current = from + rows.length
+    const more = rows.length === PAGE_SIZE
+    setHasMore(more)
+    hasMoreRef.current = more
+  }, []) // stable — reads all query params via refs
+
+  // ── Click-outside to close filter/sort panels ────────────
   useEffect(() => {
-    if (!filterOpen) return
-    const handler = (e) => { if (filterPopupRef.current && !filterPopupRef.current.contains(e.target)) setFilterOpen(null) }
+    if (!filterPanelOpen && !sortPanelOpen) return
+    const handler = (e) => {
+      if (filterPanelOpen && filterPanelRef.current && !filterPanelRef.current.contains(e.target)) setFilterPanelOpen(false)
+      if (sortPanelOpen   && sortPanelRef.current   && !sortPanelRef.current.contains(e.target))   setSortPanelOpen(false)
+    }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [filterOpen])
+  }, [filterPanelOpen, sortPanelOpen])
 
-  const getUniqueValues = (colKey) => [...new Set(leads.map((r) => r[colKey]).filter(Boolean))].sort((a, b) =>
-    String(a).localeCompare(String(b), undefined, { numeric: true })
-  )
+  const TEXT_CONDITIONS = ['contains', 'does not contain', 'is', 'is not', 'starts with', 'ends with']
 
-  const toggleFilterValue = (colKey, val) => setActiveFilters((prev) => {
-    const cur = new Set(prev[colKey] ?? [])
-    cur.has(val) ? cur.delete(val) : cur.add(val)
-    return { ...prev, [colKey]: cur }
+  const DESCENDING_COLS = new Set(['id', 'batch_id'])
+  const getUniqueValues = (colKey) => [...new Set(leads.map((r) => r[colKey]).filter(Boolean))].sort((a, b) => {
+    const cmp = String(a).localeCompare(String(b), undefined, { numeric: true })
+    return DESCENDING_COLS.has(colKey) ? -cmp : cmp
   })
 
-  const clearFilter = (colKey) => setActiveFilters((prev) => { const next = { ...prev }; delete next[colKey]; return next })
-
-  const searchTerm = search.trim()
-  const SEARCH_EXCLUDE_KEYS = new Set(['is_rooster_partner', 's_tag_id', 'contact_id', 'remarks'])
-  const columnFilteredLeads = leads.filter((r) => {
-    const passesText = Object.entries(textFilters).every(([key, term]) => {
-      if (!term.trim()) return true
-      return String(r[key] ?? '').toLowerCase().includes(term.trim().toLowerCase())
-    })
-    if (!passesText) return false
-    return Object.entries(activeFilters).every(([key, set]) => {
-      if (!set || set.size === 0) return true
-      const col = TABLE_COLUMNS.find((c) => c.key === key)
-      if (col?.filterType === 'boolean') {
-        const v = r[key]
-        if (set.has('Yes')     && (v === true  || v === 'true'))  return true
-        if (set.has('No')      && (v === false || v === 'false')) return true
-        if (set.has('Not Set') && (v === null  || v === undefined)) return true
-        return false
-      }
-      if (col?.filterType === 'presence') {
-        const v = r[key]
-        if (set.has('Yes') && (v !== null && v !== undefined)) return true
-        if (set.has('No')  && (v === null || v === undefined))  return true
-        return false
-      }
-      if (col?.filterOptions) {
-        const v = r[key]
-        if (set.has('Not Set') && (v === null || v === undefined || v === '')) return true
-        if ([...set].filter((s) => s !== 'Not Set').some((s) => String(v).toUpperCase() === s.toUpperCase())) return true
-        return false
-      }
-      return set.has(r[key])
-    })
-  })
-  const filteredLeads = searchTerm.length >= 3
-    ? columnFilteredLeads.filter((row) =>
-        Object.entries(row).some(([key, val]) =>
-          !SEARCH_EXCLUDE_KEYS.has(key) && val != null && String(val).toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      )
-    : columnFilteredLeads
-
-  const handleSortClick = (key) => {
-    if (sortCol !== key) { setSortCol(key); setSortDir('asc'); return }
-    if (sortDir === 'asc')  { setSortDir('desc'); return }
-    setSortCol(null); setSortDir(null)
+  const getValueOptions = (colKey) => {
+    const col = TABLE_COLUMNS.find((c) => c.key === colKey)
+    if (!col) return []
+    if (col.filterType === 'boolean') return ['Yes', 'No', 'Not Set']
+    if (col.filterType === 'presence') return ['Yes', 'No']
+    if (col.filterOptions) return col.filterOptions
+    if (col.key === 'country') return countries.map((c) => c.name)
+    if (dynamicFilterOptions[colKey]) return dynamicFilterOptions[colKey]
+    return getUniqueValues(colKey)
   }
 
-  const sortedLeads = sortCol && sortDir
-    ? [...filteredLeads].sort((a, b) => {
-        const av = a[sortCol] ?? ''
-        const bv = b[sortCol] ?? ''
-        const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' })
-        return sortDir === 'asc' ? cmp : -cmp
-      })
-    : filteredLeads
+  const isTextColumn = (colKey) => {
+    const col = TABLE_COLUMNS.find((c) => c.key === colKey)
+    return col?.filterType === 'text'
+  }
 
-  const selectableLeads = sortedLeads.filter((r) => !isInvalid(r.status))
+  const addFilterRow = () => setFilterRows((prev) => [...prev, { id: Date.now(), column: '', condition: 'contains', value: '' }])
+  const removeFilterRow = (id) => setFilterRows((prev) => prev.filter((r) => r.id !== id))
+  const updateFilterRow = (id, patch) => setFilterRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r))
+
+  const addSortRow = () => setSortRows((prev) => [...prev, { id: Date.now(), column: '', direction: 'asc' }])
+  const removeSortRow = (id) => setSortRows((prev) => prev.filter((r) => r.id !== id))
+  const updateSortRow = (id, patch) => setSortRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r))
+
+  const activeFilterRows = filterRows.filter((fr) => fr.column && fr.value)
+  const activeSortRows   = sortRows.filter((sr) => sr.column)
+
+  // Stable serialized keys — only change when complete (column+value) rows change
+  const activeFiltersKey = useMemo(() => JSON.stringify(activeFilterRows), [activeFilterRows])
+  const activeSortsKey   = useMemo(() => JSON.stringify(activeSortRows),   [activeSortRows])
+
+  const selectableLeads = leads.filter((r) => !isInvalid(r.status))
   const allSelected  = selectableLeads.length > 0 && selectedRows.size === selectableLeads.length
   const someSelected = selectedRows.size > 0 && !allSelected
 
@@ -1045,8 +1171,51 @@ function App() {
     })
   }
 
-  // Fetch table data from Supabase on mount
-  useEffect(() => { fetchLeads() }, [])
+  // Initial fetch on mount; debounced re-fetch on filter/sort/search changes
+  const isFirstFetch = useRef(true)
+  useEffect(() => {
+    if (isFirstFetch.current) {
+      isFirstFetch.current = false
+      fetchLeads(true)
+      return
+    }
+    const t = setTimeout(() => fetchLeads(true), 350)
+    return () => clearTimeout(t)
+  }, [activeFiltersKey, activeSortsKey, filterConnector, search, fetchLeads])
+
+  // Infinite scroll — load next page when sentinel enters viewport
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
+          fetchLeads(false)
+        }
+      },
+      { rootMargin: '300px' }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [fetchLeads])
+
+  // Fetch all distinct values for dropdown filter columns from Supabase
+  useEffect(() => {
+    const DYNAMIC_COLS = ['batch_id', 'result_type']
+    Promise.all(
+      DYNAMIC_COLS.map(async (col) => {
+        const { data } = await supabase
+          .from('google_lead_gen_table')
+          .select(col)
+          .not(col, 'is', null)
+          .limit(2000)
+        const values = [...new Set((data ?? []).map((r) => r[col]).filter(Boolean))]
+        if (col === 'batch_id') values.sort((a, b) => String(b).localeCompare(String(a), undefined, { numeric: true }))
+        else values.sort()
+        return [col, values]
+      })
+    ).then((entries) => setDynamicFilterOptions(Object.fromEntries(entries)))
+  }, [])
 
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [])
@@ -1121,9 +1290,9 @@ function App() {
   }
 
   const BATCH_LABELS = {
-    [N8N_AFFILIATES_WEBHOOK]:  { title: 'Check for Affiliates',        desc: 'Select the batch ID you want to run affiliate checking for.' },
-    [N8N_DUPLICATES_WEBHOOK]:  { title: 'Check for Domain Duplicates', desc: 'Select the batch ID you want to run domain duplicate checking for.' },
-    [N8N_ROOSTER_WEBHOOK]:     { title: 'Check if Rooster Partner',    desc: 'Select the batch ID you want to run Rooster Partner checking for.' },
+    [N8N_AFFILIATES_WEBHOOK]:  { title: "Check if it's an Affiliate",           desc: 'Select the batch ID you want to run affiliate checking for.' },
+    [N8N_DUPLICATES_WEBHOOK]:  { title: 'Check if it exists on Monday',         desc: 'Select the batch ID you want to run domain duplicate checking for.' },
+    [N8N_ROOSTER_WEBHOOK]:     { title: 'Check if promoting Rooster Partners',  desc: 'Select the batch ID you want to run Rooster Partner checking for.' },
   }
 
   const openBatchModal = async (webhookUrl, extraFields = []) => {
@@ -1195,6 +1364,62 @@ function App() {
     setProfileModal((prev) => prev ? { ...prev, ...updates } : prev)
   }
 
+  const handleDeleteSelected = async () => {
+    setDeleting(true)
+    const toDelete = leads.filter((r) => selectedRows.has(r.id))
+
+    const sTagIds     = [...new Set(toDelete.map((r) => r.s_tag_id).filter(Boolean))]
+    const contactIds  = [...new Set(toDelete.map((r) => r.contact_id).filter(Boolean))]
+    const leadIds     = toDelete.map((r) => r.id)
+
+    if (sTagIds.length > 0)
+      await supabase.from('s_tags_table').delete().in('s_tag_id', sTagIds)
+    if (contactIds.length > 0)
+      await supabase.from('contact_table').delete().in('contact_id', contactIds)
+
+    const { error } = await supabase.from('google_lead_gen_table').delete().in('id', leadIds)
+    setDeleting(false)
+    setDeleteConfirm(false)
+    if (error) { setModal({ phase: 'error', data: { message: 'Failed to delete selected leads.' } }); return }
+    await fetchLeads()
+  }
+
+  const handleOpenAddNew = async () => {
+    const { data } = await supabase
+      .from('google_lead_gen_table')
+      .select('batch_id')
+      .not('batch_id', 'is', null)
+      .order('batch_id', { ascending: false })
+      .limit(1)
+    const latestBatchId = data?.[0]?.batch_id ?? ''
+    setAddNewModal({ batchId: latestBatchId, keyword: '', country: '', url: '', domain: '', resultType: '', saving: false })
+  }
+
+  const handleSaveNewLead = async () => {
+    if (!addNewModal) return
+    setAddNewModal((prev) => ({ ...prev, saving: true }))
+    const { error } = await supabase.from('google_lead_gen_table').insert({
+      batch_id: addNewModal.batchId,
+      keyword: addNewModal.keyword,
+      country: addNewModal.country,
+      url: addNewModal.url,
+      domain: addNewModal.domain,
+      result_type: addNewModal.resultType,
+    })
+    if (error) {
+      setAddNewModal((prev) => ({ ...prev, saving: false }))
+      setModal({ phase: 'error', data: { message: 'Failed to add new lead.' } })
+      return
+    }
+    setAddNewModal(null)
+    setModal({ phase: 'success', data: { message: 'New lead added successfully.' } })
+    await fetchLeads()
+  }
+
+  const canSaveNewLead = addNewModal &&
+    addNewModal.batchId && addNewModal.keyword.trim() && addNewModal.country &&
+    addNewModal.url.trim() && addNewModal.domain.trim() && addNewModal.resultType
+
   const handlePasswordConfirm = () => {
     if (passwordModal.input !== MONDAY_PASSWORD) {
       setPasswordModal((prev) => ({ ...prev, error: 'Incorrect password. Please try again.' }))
@@ -1256,28 +1481,163 @@ function App() {
             {loading ? 'Submitting...' : 'Submit'}
           </button>
 
-          <div className="search-divider" />
-
-          <input
-            type="text"
-            className="input-search"
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
         </form>
 
         <div className="action-bar">
-          <button className="btn-action" onClick={handleBatchActionClick(N8N_AFFILIATES_WEBHOOK, ['country'])} disabled={loading}>Check for Affiliates</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_AFFILIATES_WEBHOOK, ['country'])} disabled={loading}>Check if it's an Affiliate</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check for Domain Duplicates</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_DUPLICATES_WEBHOOK)} disabled={loading}>Check if it exists on Monday</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if Rooster Partner</button>
+          <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if promoting Rooster Partners</button>
+          <span className="action-sep">›</span>
+          <button className="btn-action" disabled>Check for Contact Details</button>
+          <span className="action-sep">›</span>
+          <button className="btn-action" disabled>Collect S-Tags</button>
         </div>
       </div>
 
       <div className="table-card">
-        <p className="table-hint">Double-click a cell in the <strong>Rooster Partner</strong>, <strong>Affiliate Name</strong>, or <strong>Status</strong> columns to edit it.</p>
+        <p className="table-hint">Double-click any highlighted cell to edit it inline.</p>
+
+        {/* ── Monday.com-style toolbar ── */}
+        <div className="mb-toolbar">
+          {/* Search */}
+          <div className="mb-toolbar-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              type="text"
+              className="mb-search-input"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Filter */}
+          <div className="mb-toolbar-item-wrap" ref={filterPanelRef}>
+            <button
+              className={`mb-toolbar-btn${activeFilterRows.length > 0 ? ' mb-toolbar-btn--active' : ''}`}
+              onClick={() => { setFilterPanelOpen((v) => !v); setSortPanelOpen(false) }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+              Filter
+              {activeFilterRows.length > 0 && <span className="mb-badge">{activeFilterRows.length}</span>}
+            </button>
+
+            {filterPanelOpen && (
+              <div className="mb-panel">
+                <div className="mb-panel-header">
+                  <span className="mb-panel-title">Advanced filters <span className="mb-panel-count">{leads.length} leads loaded</span></span>
+                  <div className="mb-panel-header-actions">
+                    {activeFilterRows.length > 0 && <button className="mb-panel-clear" onClick={() => setFilterRows([])}>Clear all</button>}
+                  </div>
+                </div>
+
+                {filterRows.map((fr, idx) => (
+                  <div key={fr.id} className="mb-panel-row">
+                    {idx === 0
+                      ? <span className="mb-row-label">Where</span>
+                      : (
+                        <button
+                          className="mb-connector-btn"
+                          onClick={() => setFilterConnector((v) => v === 'AND' ? 'OR' : 'AND')}
+                        >{filterConnector}</button>
+                      )
+                    }
+                    <select className="mb-select" value={fr.column} onChange={(e) => {
+                      const col = TABLE_COLUMNS.find((c) => c.key === e.target.value)
+                      updateFilterRow(fr.id, { column: e.target.value, condition: col?.filterType === 'text' ? 'contains' : 'is', value: '' })
+                    }}>
+                      <option value="">Column</option>
+                      {TABLE_COLUMNS.filter((c) => c.hasFilter).map((c) => (
+                        <option key={c.key} value={c.key}>{c.label}</option>
+                      ))}
+                    </select>
+
+                    {fr.column && isTextColumn(fr.column) && (
+                      <select className="mb-select mb-select--condition" value={fr.condition} onChange={(e) => updateFilterRow(fr.id, { condition: e.target.value })}>
+                        {TEXT_CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    )}
+
+                    {fr.column && (
+                      isTextColumn(fr.column) ? (
+                        <input
+                          className="mb-value-input"
+                          type="text"
+                          placeholder="Value"
+                          value={fr.value}
+                          onChange={(e) => updateFilterRow(fr.id, { value: e.target.value })}
+                        />
+                      ) : (
+                        <select className="mb-select mb-select--value" value={fr.value} onChange={(e) => updateFilterRow(fr.id, { value: e.target.value })}>
+                          <option value="" disabled>Value</option>
+                          {getValueOptions(fr.column).map((v) => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      )
+                    )}
+
+                    <button className="mb-row-remove" onClick={() => removeFilterRow(fr.id)}>✕</button>
+                  </div>
+                ))}
+
+                <button className="mb-add-row-btn" onClick={addFilterRow}>+ New filter</button>
+              </div>
+            )}
+          </div>
+
+          {/* Sort */}
+          <div className="mb-toolbar-item-wrap" ref={sortPanelRef}>
+            <button
+              className={`mb-toolbar-btn${activeSortRows.length > 0 ? ' mb-toolbar-btn--active' : ''}`}
+              onClick={() => { setSortPanelOpen((v) => !v); setFilterPanelOpen(false) }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+              Sort
+              {activeSortRows.length > 0 && <span className="mb-badge">{activeSortRows.length}</span>}
+            </button>
+
+            {sortPanelOpen && (
+              <div className="mb-panel">
+                <div className="mb-panel-header">
+                  <span className="mb-panel-title">Sort by</span>
+                </div>
+
+                {sortRows.map((sr) => (
+                  <div key={sr.id} className="mb-panel-row">
+                    <select className="mb-select" value={sr.column} onChange={(e) => updateSortRow(sr.id, { column: e.target.value })}>
+                      <option value="">Choose column</option>
+                      {TABLE_COLUMNS.filter((c) => !c.noSort).map((c) => (
+                        <option key={c.key} value={c.key}>{c.label}</option>
+                      ))}
+                    </select>
+                    <select className="mb-select mb-select--condition" value={sr.direction} onChange={(e) => updateSortRow(sr.id, { direction: e.target.value })}>
+                      <option value="asc">↑ Ascending</option>
+                      <option value="desc">↓ Descending</option>
+                    </select>
+                    <button className="mb-row-remove" onClick={() => removeSortRow(sr.id)}>✕</button>
+                  </div>
+                ))}
+
+                <button className="mb-add-row-btn" onClick={addSortRow}>+ New sort</button>
+              </div>
+            )}
+          </div>
+
+          {/* Delete */}
+          <button
+            className="mb-toolbar-btn mb-toolbar-btn--danger"
+            disabled={selectedRows.size === 0}
+            onClick={() => setDeleteConfirm(true)}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            Delete{selectedRows.size > 0 ? ` (${selectedRows.size})` : ''}
+          </button>
+
+          {/* Add New */}
+          <button className="mb-btn-new" onClick={handleOpenAddNew}>+ Add New</button>
+        </div>
+
         <div className="table-wrapper">
           <table className="leads-table">
             <thead>
@@ -1292,76 +1652,8 @@ function App() {
                 </th>
                 <th className="col-view"></th>
                 {TABLE_COLUMNS.map((col) => (
-                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined}>
-                    <span className="th-content">
-                      {col.label}
-                      {!col.noSort && (
-                        <button className="sort-btn" onClick={() => handleSortClick(col.key)} title={`Sort by ${col.label}`}>
-                          {sortCol === col.key && sortDir === 'asc' ? '↑' : sortCol === col.key && sortDir === 'desc' ? '↓' : '↕'}
-                        </button>
-                      )}
-                      {col.hasFilter && (
-                        <span className="batch-filter-wrap" ref={filterOpen === col.key ? filterPopupRef : null}>
-                          <button
-                            className={`sort-btn batch-filter-btn${(activeFilters[col.key]?.size > 0 || textFilters[col.key]?.trim()) ? ' batch-filter-btn--active' : ''}`}
-                            title={`Filter by ${col.label}`}
-                            onClick={() => setFilterOpen((v) => v === col.key ? null : col.key)}
-                          >
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
-                          </button>
-                          {filterOpen === col.key && (
-                            <div className="batch-filter-popup">
-                              <div className="batch-filter-header">
-                                <span>Filter by {col.label}</span>
-                                {(activeFilters[col.key]?.size > 0 || textFilters[col.key]?.trim()) && (
-                                  <button className="batch-filter-clear" onClick={() => {
-                                    clearFilter(col.key)
-                                    setTextFilters((prev) => { const next = { ...prev }; delete next[col.key]; return next })
-                                    setTextFilterDrafts((prev) => { const next = { ...prev }; delete next[col.key]; return next })
-                                  }}>Clear</button>
-                                )}
-                              </div>
-                              {col.filterType === 'text' && <p className="batch-filter-hint">Press Enter to apply.</p>}
-                              {col.filterType === 'text' ? (
-                                <div className="batch-filter-text">
-                                  <input
-                                    className="batch-filter-text-input"
-                                    type="text"
-                                    placeholder={`Search ${col.label}…`}
-                                    value={textFilterDrafts[col.key] ?? ''}
-                                    onChange={(e) => setTextFilterDrafts((prev) => ({ ...prev, [col.key]: e.target.value }))}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') setTextFilters((prev) => ({ ...prev, [col.key]: e.target.value }))
-                                    }}
-                                    autoFocus
-                                  />
-                                </div>
-                              ) : (
-                              <ul className="batch-filter-list">
-                                {(col.filterType === 'boolean' ? ['Yes', 'No', 'Not Set'] : col.filterType === 'presence' ? ['Yes', 'No'] : col.filterOptions ? col.filterOptions : getUniqueValues(col.key)).map((val) => (
-                                  <li key={val} className="batch-filter-item">
-                                    <label>
-                                      <input
-                                        type="checkbox"
-                                        checked={activeFilters[col.key]?.has(val) ?? false}
-                                        onChange={() => toggleFilterValue(col.key, val)}
-                                      />
-                                      {(col.filterType === 'boolean' || col.filterType === 'presence') && (
-                                        <span className={val === 'Yes' ? 'stag-indicator stag-indicator--yes' : val === 'No' ? 'stag-indicator stag-indicator--no' : 'stag-indicator stag-indicator--unknown'}>
-                                          {val === 'Yes' ? '✓' : val === 'No' ? '✗' : '?'}
-                                        </span>
-                                      )}
-                                      {val}
-                                    </label>
-                                  </li>
-                                ))}
-                              </ul>
-                              )}
-                            </div>
-                          )}
-                        </span>
-                      )}
-                    </span>
+                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'is_affiliate' ? 'col-affiliate' : col.key === 'is_on_monday' ? 'col-on-monday' : col.key === 'contact_id' ? 'col-contact' : undefined}>
+                    {col.label}
                   </th>
                 ))}
               </tr>
@@ -1373,14 +1665,14 @@ function App() {
                     Loading...
                   </td>
                 </tr>
-              ) : sortedLeads.length === 0 ? (
+              ) : leads.length === 0 ? (
                 <tr>
                   <td colSpan={TABLE_COLUMNS.length + 2} className="no-data">
-                    {searchTerm.length >= 3 ? `No results for "${searchTerm}".` : 'No data to display.'}
+                    No data to display.
                   </td>
                 </tr>
               ) : (
-                sortedLeads.map((row) => (
+                leads.map((row) => (
                   <tr key={row.id} className={[selectedRows.has(row.id) ? 'row-selected' : '', isInvalid(row.status) ? 'row-invalid' : '', isLead(row.status) ? 'row-lead' : '', row.remarks?.includes('NOTICE: ') ? 'row-notice' : ''].filter(Boolean).join(' ')}>
                     <td className="col-checkbox">
                       <input
@@ -1404,17 +1696,17 @@ function App() {
                       const isEditing = editingCell?.rowId === row.id && editingCell?.colKey === col.key
 
                       let value
-                      if (col.key === 'is_rooster_partner') {
-                        value = raw === true || raw === 'true' ? 'Yes' : raw === false || raw === 'false' ? 'No' : '—'
+                      if (col.key === 'is_rooster_partner' || col.key === 'is_affiliate' || col.key === 'is_on_monday') {
+                        value = raw === true || raw === 'true' ? 'Yes' : raw === false || raw === 'false' ? 'No' : '?'
                       } else if (col.key === 'time_stamp') {
                         if (raw) {
                           const d = new Date(raw)
                           value = isNaN(d.getTime()) ? String(raw) : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
                         } else {
-                          value = '—'
+                          value = '?'
                         }
                       } else {
-                        value = raw ?? '—'
+                        value = raw ?? '?'
                       }
 
                       const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined
@@ -1471,10 +1763,10 @@ function App() {
                                     <img src={`https://flagcdn.com/20x15/${code.toLowerCase()}.png`} alt={code} />
                                     {code}
                                   </span>
-                                : (raw ? <span>{raw}</span> : '—')
+                                : (raw ? <span>{raw}</span> : <span className="stag-indicator stag-indicator--unknown">?</span>)
                             })()
                           ) : col.key === 'result_type' ? (
-                            <span className={`result-type-badge ${raw === 'PPC' ? 'result-type--ppc' : raw === 'Organic' ? 'result-type--organic' : 'result-type--other'}`} title={raw ?? '—'}>
+                            <span className={`result-type-badge ${raw === 'PPC' ? 'result-type--ppc' : raw === 'Organic' ? 'result-type--organic' : 'result-type--other'}`} title={raw ?? '?'}>
                               {raw === 'PPC' ? (
                                 <>
                                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -1485,9 +1777,9 @@ function App() {
                                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
                                   Organic
                                 </>
-                              ) : (raw ?? '—')}
+                              ) : raw ? raw : <span className="stag-indicator stag-indicator--unknown">?</span>}
                             </span>
-                          ) : col.key === 'is_rooster_partner' ? (
+                          ) : (col.key === 'is_rooster_partner' || col.key === 'is_affiliate' || col.key === 'is_on_monday') ? (
                             <span className={
                               (raw === true || raw === 'true')  ? 'stag-indicator stag-indicator--yes' :
                               (raw === false || raw === 'false') ? 'stag-indicator stag-indicator--no' :
@@ -1507,7 +1799,7 @@ function App() {
                             <a href={row[col.key]} target="_blank" rel="noreferrer" className="cell-link">
                               {row[col.key]}
                             </a>
-                          ) : value}
+                          ) : value === '?' ? <span className="stag-indicator stag-indicator--unknown">?</span> : value}
                         </td>
                       )
                     })}
@@ -1516,6 +1808,19 @@ function App() {
               )}
             </tbody>
           </table>
+
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} style={{ height: 1 }} />
+          {!tableLoading && loadingMore && (
+            <div className="no-data" style={{ padding: '12px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+              Loading more…
+            </div>
+          )}
+          {!tableLoading && !hasMore && leads.length > 0 && (
+            <div className="no-data" style={{ padding: '10px', textAlign: 'center', color: '#555', fontSize: '12px' }}>
+              All {leads.length} records loaded.
+            </div>
+          )}
         </div>
       </div>
 
@@ -1546,6 +1851,73 @@ function App() {
           contact: contacts.filter((c) => c.is_chosen),
         }) })}
       />
+
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon modal-icon--error">!</div>
+            <h2 className="modal-title">Delete {selectedRows.size} lead{selectedRows.size !== 1 ? 's' : ''}?</h2>
+            <p className="modal-message">
+              This will permanently delete {selectedRows.size} lead{selectedRows.size !== 1 ? 's' : ''} along with any associated S-Tags and contacts. <strong>This cannot be undone.</strong>
+            </p>
+            <div className="modal-actions">
+              <button className="btn-modal-cancel" onClick={() => setDeleteConfirm(false)} disabled={deleting}>Cancel</button>
+              <button className="modal-close-btn modal-close-btn--danger" onClick={handleDeleteSelected} disabled={deleting} style={{ marginTop: 0 }}>
+                {deleting ? 'Deleting...' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addNewModal && (
+        <div className="modal-overlay" onClick={() => !addNewModal.saving && setAddNewModal(null)}>
+          <div className="modal add-new-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">Add New Lead</h2>
+
+            <div className="add-new-form">
+              <div className="add-new-field">
+                <label className="add-new-label">Batch ID</label>
+                <input className="add-new-input" type="text" value={addNewModal.batchId} onChange={(e) => setAddNewModal((p) => ({ ...p, batchId: e.target.value }))} />
+              </div>
+              <div className="add-new-field">
+                <label className="add-new-label">Keyword <span className="field-required">*</span></label>
+                <input className="add-new-input" type="text" placeholder="Enter keyword" value={addNewModal.keyword} onChange={(e) => setAddNewModal((p) => ({ ...p, keyword: e.target.value }))} />
+              </div>
+              <div className="add-new-field">
+                <label className="add-new-label">Country <span className="field-required">*</span></label>
+                <select className="add-new-select" value={addNewModal.country} onChange={(e) => setAddNewModal((p) => ({ ...p, country: e.target.value }))}>
+                  <option value="" disabled>Select country</option>
+                  {countries.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="add-new-field">
+                <label className="add-new-label">Full URL <span className="field-required">*</span></label>
+                <input className="add-new-input" type="text" placeholder="https://example.com/page" value={addNewModal.url} onChange={(e) => setAddNewModal((p) => ({ ...p, url: e.target.value }))} />
+              </div>
+              <div className="add-new-field">
+                <label className="add-new-label">Clean Domain <span className="field-required">*</span></label>
+                <input className="add-new-input" type="text" placeholder="example.com" value={addNewModal.domain} onChange={(e) => setAddNewModal((p) => ({ ...p, domain: e.target.value }))} />
+              </div>
+              <div className="add-new-field">
+                <label className="add-new-label">Result Type <span className="field-required">*</span></label>
+                <select className="add-new-select" value={addNewModal.resultType} onChange={(e) => setAddNewModal((p) => ({ ...p, resultType: e.target.value }))}>
+                  <option value="" disabled>Select type</option>
+                  <option value="PPC">PPC</option>
+                  <option value="Organic">Organic</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn-modal-cancel" onClick={() => setAddNewModal(null)} disabled={addNewModal.saving}>Cancel</button>
+              <button className="modal-close-btn" disabled={!canSaveNewLead || addNewModal.saving} onClick={handleSaveNewLead} style={{ marginTop: 0 }}>
+                {addNewModal.saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Modal modal={modal} onClose={handleModalClose} />
 
