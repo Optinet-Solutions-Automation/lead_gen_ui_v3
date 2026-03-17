@@ -1187,9 +1187,9 @@ function App() {
   }, [fetchLeads])
 
   // Fetch all distinct values for dropdown filter columns from Supabase
-  useEffect(() => {
+  const fetchFilterOptions = useCallback(async () => {
     const DYNAMIC_COLS = ['batch_id', 'result_type']
-    Promise.all(
+    const entries = await Promise.all(
       DYNAMIC_COLS.map(async (col) => {
         const { data } = await supabase
           .from('google_lead_gen_table')
@@ -1201,8 +1201,11 @@ function App() {
         else values.sort()
         return [col, values]
       })
-    ).then((entries) => setDynamicFilterOptions(Object.fromEntries(entries)))
+    )
+    setDynamicFilterOptions(Object.fromEntries(entries))
   }, [])
+
+  useEffect(() => { fetchFilterOptions() }, [fetchFilterOptions])
 
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [])
@@ -1252,6 +1255,7 @@ function App() {
     stopPolling()
     if (modal?.phase === 'success') {
       fetchLeads()
+      fetchFilterOptions()
       setProfileRefreshKey((k) => k + 1)
     }
     setModal(null)
@@ -1327,6 +1331,7 @@ function App() {
     if (error) {
       setModal({ phase: 'error', data: { message: 'Failed to save changes.' } })
       fetchLeads()
+      fetchFilterOptions()
     }
   }
 
@@ -1369,6 +1374,7 @@ function App() {
     setDeleteConfirm(false)
     if (error) { setModal({ phase: 'error', data: { message: 'Failed to delete selected leads.' } }); return }
     await fetchLeads()
+    await fetchFilterOptions()
   }
 
   const handleOpenAddNew = async () => {
@@ -1401,6 +1407,7 @@ function App() {
     setAddNewModal(null)
     setModal({ phase: 'success', data: { message: 'New lead added successfully.' } })
     await fetchLeads()
+    await fetchFilterOptions()
   }
 
   const canSaveNewLead = addNewModal &&
