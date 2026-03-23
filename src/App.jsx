@@ -29,8 +29,8 @@ const TABLE_COLUMNS = [
   { key: 'is_affiliate',       label: 'Is an Affiliate',        noSort: true, hasFilter: true, filterType: 'boolean' },
   { key: 'is_on_monday',       label: 'Is Existing on Monday',  noSort: true, hasFilter: true, filterType: 'boolean' },
   { key: 'is_rooster_partner', label: 'Is Rooster Partner',     noSort: true, hasFilter: true, filterType: 'boolean' },
-  { key: 'contact_id',         label: 'Has Contact Details',    noSort: true, hasFilter: true, filterType: 'presence' },
-  { key: 's_tag_id',           label: 'Has S-Tags',             noSort: true, hasFilter: true, filterType: 'presence' },
+  { key: 'has_contact_details', label: 'Has Contact Details',    noSort: true, hasFilter: true, filterType: 'boolean' },
+  { key: 'has_s_tags',         label: 'Has S-Tags',             noSort: true, hasFilter: true, filterType: 'boolean' },
   { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterType: 'text' },
   { key: 'remarks',            label: 'Remarks',         noSort: true },
 ]
@@ -479,10 +479,10 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
           ))}
         </div>
 
-        {roosterIsSet && <hr className="profile-divider" />}
+        <hr className="profile-divider" />
 
         {/* ── S-Tags section ── */}
-        {roosterIsSet && <div className="profile-section">
+        <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">S-Tags</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -606,12 +606,12 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
               </div>
             )}
           </div>
-        </div>}
+        </div>
 
-        {roosterIsFalse && <hr className="profile-divider" />}
+        <hr className="profile-divider" />
 
         {/* ── Contacts section ── */}
-        {roosterIsFalse && <div className="profile-section">
+        <div className="profile-section">
           <div className="profile-section-header">
             <h3 className="profile-section-title">Contacts</h3>
             <p className="table-hint" style={{ margin: 0 }}>Double-click a cell to edit.</p>
@@ -768,7 +768,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
               </div>
             )}
           </div>
-        </div>}
+        </div>
 
         {/* ── Add to Monday.com ── */}
         {(() => {
@@ -1021,6 +1021,7 @@ function App() {
 
     if (reset) {
       setTableLoading(true)
+      loadingMoreRef.current = true
       setSelectedRows(new Set())
       offsetRef.current = 0
       setHasMore(true)
@@ -1078,6 +1079,7 @@ function App() {
         return fresh ? { ...prev, ...fresh } : prev
       })
       setTableLoading(false)
+      loadingMoreRef.current = false
     } else {
       setLeads((prev) => [...prev, ...rows])
       setLoadingMore(false)
@@ -1284,6 +1286,7 @@ function App() {
     [N8N_AFFILIATES_WEBHOOK]:  { title: "Check if it's an Affiliate",           desc: 'Select the batch ID you want to run affiliate checking for.' },
     [N8N_DUPLICATES_WEBHOOK]:  { title: 'Check if it exists on Monday',         desc: 'Select the batch ID you want to run domain duplicate checking for.' },
     [N8N_ROOSTER_WEBHOOK]:     { title: 'Check if promoting Rooster Partners',  desc: 'Select the batch ID you want to run Rooster Partner checking for.' },
+    [N8N_CONTACTS_WEBHOOK]:    { title: 'Check for Contact Details',            desc: 'Select the batch ID you want to run contact detail checking for.' },
   }
 
   const openBatchModal = async (webhookUrl, extraFields = []) => {
@@ -1349,6 +1352,22 @@ function App() {
       return
     }
     await openBatchModal(webhookUrl, extraFields)
+  }
+
+  const handleCheckContactDetails = async () => {
+    const CONTACT_FIELDS = ['country', 'is_rooster_partner']
+    if (selectedRows.size > 0) {
+      if (selectedRows.size > 5) {
+        setModal({ phase: 'error', data: { message: 'You can only check contact details for up to 5 rows at a time. Please uncheck some rows and try again.' } })
+        return
+      }
+      const payload = leads
+        .filter((r) => selectedRows.has(r.id))
+        .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(CONTACT_FIELDS.map((f) => [f, r[f] ?? null])) }))
+      await sendToWebhook(N8N_CONTACTS_WEBHOOK, payload)
+      return
+    }
+    await openBatchModal(N8N_CONTACTS_WEBHOOK, CONTACT_FIELDS)
   }
 
   const handleLeadUpdate = (rowId, updates) => {
@@ -1645,7 +1664,7 @@ function App() {
                 </th>
                 <th className="col-view"></th>
                 {TABLE_COLUMNS.map((col) => (
-                  <th key={col.key} className={col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'is_affiliate' ? 'col-affiliate' : col.key === 'is_on_monday' ? 'col-on-monday' : col.key === 'contact_id' ? 'col-contact' : undefined}>
+                  <th key={col.key} className={col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'is_affiliate' ? 'col-affiliate' : col.key === 'is_on_monday' ? 'col-on-monday' : col.key === 'has_contact_details' ? 'col-contact' : undefined}>
                     {col.label}
                   </th>
                 ))}
@@ -1689,7 +1708,7 @@ function App() {
                       const isEditing = editingCell?.rowId === row.id && editingCell?.colKey === col.key
 
                       let value
-                      if (col.key === 'is_rooster_partner' || col.key === 'is_affiliate' || col.key === 'is_on_monday') {
+                      if (col.key === 'is_rooster_partner' || col.key === 'is_affiliate' || col.key === 'is_on_monday' || col.key === 'has_s_tags' || col.key === 'has_contact_details') {
                         value = raw === true || raw === 'true' ? 'Yes' : raw === false || raw === 'false' ? 'No' : '?'
                       } else if (col.key === 'time_stamp') {
                         if (raw) {
@@ -1704,7 +1723,7 @@ function App() {
                         value = raw ?? '?'
                       }
 
-                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 's_tag_id' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'contact_id' ? 'col-contact' : undefined
+                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'has_contact_details' ? 'col-contact' : undefined
                       const className = [baseClass, isEditing ? 'cell--editing' : editConf ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
 
                       return (
@@ -1774,21 +1793,13 @@ function App() {
                                 </>
                               ) : raw ? raw : <span className="stag-indicator stag-indicator--unknown">?</span>}
                             </span>
-                          ) : (col.key === 'is_rooster_partner' || col.key === 'is_affiliate' || col.key === 'is_on_monday') ? (
+                          ) : (col.key === 'is_rooster_partner' || col.key === 'is_affiliate' || col.key === 'is_on_monday' || col.key === 'has_s_tags' || col.key === 'has_contact_details') ? (
                             <span className={
                               (raw === true || raw === 'true')  ? 'stag-indicator stag-indicator--yes' :
                               (raw === false || raw === 'false') ? 'stag-indicator stag-indicator--no' :
                               'stag-indicator stag-indicator--unknown'
                             }>
                               {(raw === true || raw === 'true') ? '✓' : (raw === false || raw === 'false') ? '✗' : '?'}
-                            </span>
-                          ) : col.key === 's_tag_id' ? (
-                            <span className={row[col.key] ? 'stag-indicator stag-indicator--yes' : 'stag-indicator stag-indicator--no'}>
-                              {row[col.key] ? '✓' : '✗'}
-                            </span>
-                          ) : col.key === 'contact_id' ? (
-                            <span className={row[col.key] ? 'stag-indicator stag-indicator--yes' : 'stag-indicator stag-indicator--no'}>
-                              {row[col.key] ? '✓' : '✗'}
                             </span>
                           ) : (col.key === 'url' || col.key === 'domain') && row[col.key] ? (
                             <a href={row[col.key]} target="_blank" rel="noreferrer" className="cell-link">
