@@ -299,9 +299,9 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     if (updated.length === 0) {
       const { error: updateError } = await supabase
         .from('google_lead_gen_table')
-        .update({ contact_id: null })
+        .update({ contact_id: null, has_contact_details: null })
         .eq('id', row.id)
-      if (!updateError) onLeadUpdate(row.id, { contact_id: null })
+      if (!updateError) onLeadUpdate(row.id, { contact_id: null, has_contact_details: null })
     }
   }
 
@@ -375,9 +375,9 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     if (updated.length === 0) {
       const { error: updateError } = await supabase
         .from('google_lead_gen_table')
-        .update({ s_tag_id: null })
+        .update({ s_tag_id: null, has_s_tags: null })
         .eq('id', row.id)
-      if (!updateError) onLeadUpdate(row.id, { s_tag_id: null })
+      if (!updateError) onLeadUpdate(row.id, { s_tag_id: null, has_s_tags: null })
     }
   }
 
@@ -1367,7 +1367,7 @@ function App() {
       await sendToWebhook(N8N_CONTACTS_WEBHOOK, payload)
       return
     }
-    await openBatchModal(N8N_CONTACTS_WEBHOOK, CONTACT_FIELDS)
+    setModal({ phase: 'error', data: { message: 'Please select at least one row before checking contact details.' } })
   }
 
   const handleLeadUpdate = (rowId, updates) => {
@@ -1502,7 +1502,7 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleBatchActionClick(N8N_ROOSTER_WEBHOOK, ['country'])} disabled={loading}>Check if promoting Rooster Partners</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" disabled>Check for Contact Details</button>
+          <button className="btn-action" onClick={handleCheckContactDetails} disabled={loading}>Check for Contact Details</button>
           <span className="action-sep">›</span>
           <button className="btn-action" disabled>Collect S-Tags</button>
         </div>
@@ -1838,7 +1838,7 @@ function App() {
         profileRefreshKey={profileRefreshKey}
         onCheckSTags={(sTags) => sendToWebhook(N8N_CHECK_STAGS_WEBHOOK, sTags.map((t) => ({ s_tag_autoinc_id: t.s_tag_autoinc_id, s_tag_id: t.s_tag_id, s_tag: t.s_tag, brand: t.brand })))}
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
-        onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
+        onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, [{ id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }])}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onSendSTagUpdate={(tag) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null }) })}
         onAddToMonday={(row, sTags, contacts) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_MONDAY_WEBHOOK, {
