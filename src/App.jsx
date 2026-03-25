@@ -1355,19 +1355,35 @@ function App() {
   }
 
   const handleCheckContactDetails = async () => {
-    const CONTACT_FIELDS = ['country', 'is_rooster_partner']
-    if (selectedRows.size > 0) {
-      if (selectedRows.size > 5) {
-        setModal({ phase: 'error', data: { message: 'You can only check contact details for up to 5 rows at a time. Please uncheck some rows and try again.' } })
-        return
-      }
-      const payload = leads
-        .filter((r) => selectedRows.has(r.id))
-        .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(CONTACT_FIELDS.map((f) => [f, r[f] ?? null])) }))
-      await sendToWebhook(N8N_CONTACTS_WEBHOOK, payload)
+    const EXTRA_FIELDS = ['country', 'is_rooster_partner']
+    if (selectedRows.size === 0) {
+      setModal({ phase: 'error', data: { message: 'Please select at least one row before checking contact details.' } })
       return
     }
-    setModal({ phase: 'error', data: { message: 'Please select at least one row before checking contact details.' } })
+    if (selectedRows.size > 5) {
+      setModal({ phase: 'error', data: { message: 'You can only check contact details for up to 5 rows at a time. Please uncheck some rows and try again.' } })
+      return
+    }
+    const payload = leads
+      .filter((r) => selectedRows.has(r.id))
+      .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(EXTRA_FIELDS.map((f) => [f, r[f] ?? null])) }))
+    await sendToWebhook(N8N_CONTACTS_WEBHOOK, payload)
+  }
+
+  const handleCollectSTags = async () => {
+    const EXTRA_FIELDS = ['country', 'is_rooster_partner']
+    if (selectedRows.size === 0) {
+      setModal({ phase: 'error', data: { message: 'Please select at least one row before collecting S-Tags.' } })
+      return
+    }
+    if (selectedRows.size > 5) {
+      setModal({ phase: 'error', data: { message: 'You can only collect S-Tags for up to 5 rows at a time. Please uncheck some rows and try again.' } })
+      return
+    }
+    const payload = leads
+      .filter((r) => selectedRows.has(r.id))
+      .map((r) => ({ id: r.id, url: r.url, domain: r.domain, ...Object.fromEntries(EXTRA_FIELDS.map((f) => [f, r[f] ?? null])) }))
+    await sendToWebhook(N8N_STAGS_WEBHOOK, payload)
   }
 
   const handleLeadUpdate = (rowId, updates) => {
@@ -1504,7 +1520,7 @@ function App() {
           <span className="action-sep">›</span>
           <button className="btn-action" onClick={handleCheckContactDetails} disabled={loading}>Check for Contact Details</button>
           <span className="action-sep">›</span>
-          <button className="btn-action" disabled>Collect S-Tags</button>
+          <button className="btn-action" onClick={handleCollectSTags} disabled={loading}>Collect S-Tags</button>
         </div>
       </div>
 
@@ -1837,7 +1853,7 @@ function App() {
         onError={(msg) => setModal({ phase: 'error', data: { message: msg } })}
         profileRefreshKey={profileRefreshKey}
         onCheckSTags={(sTags) => sendToWebhook(N8N_CHECK_STAGS_WEBHOOK, sTags.map((t) => ({ s_tag_autoinc_id: t.s_tag_autoinc_id, s_tag_id: t.s_tag_id, s_tag: t.s_tag, brand: t.brand })))}
-        onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
+        onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, [{ id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }])}
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, [{ id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }])}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
         onSendSTagUpdate={(tag) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null }) })}
