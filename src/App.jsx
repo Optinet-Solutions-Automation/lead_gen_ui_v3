@@ -1057,7 +1057,7 @@ function App() {
 
     // Apply search across key columns
     if (term.length >= 3) {
-      const cols = ['domain', 'keyword', 'url', 'status', 'batch_id', 'affiliate_name']
+      const cols = ['domain', 'keyword', 'url', 'status', 'affiliate_name']
       q = q.or(cols.map((c) => `${c}.ilike.%${term}%`).join(','))
     }
 
