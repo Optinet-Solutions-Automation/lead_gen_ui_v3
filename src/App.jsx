@@ -941,6 +941,11 @@ function Modal({ modal, onClose }) {
 function App() {
   const [keyword, setKeyword] = useState('')
   const [country, setCountry] = useState('')
+  const [pages,   setPages]   = useState(1)
+  const [savedKeywords, setSavedKeywords]       = useState([])
+  const [keywordDropOpen, setKeywordDropOpen]   = useState(false)
+  const [keywordSaveError, setKeywordSaveError] = useState('')
+  const keywordWrapRef = useRef(null)
   const [search, setSearch]   = useState('')
   const [leads, setLeads]         = useState([])
   const [selectedRows, setSelectedRows] = useState(new Set())
@@ -1212,7 +1217,50 @@ function App() {
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [])
 
-  const canSubmit = keyword.trim() !== '' && country !== ''
+  const canSubmit = keyword.trim() !== '' && country !== '' && pages >= 1
+
+  const fetchSavedKeywords = useCallback(async () => {
+    const { data } = await supabase
+      .from('keywords_table')
+      .select('id, keywords')
+      .order('id', { ascending: false })
+      .limit(10)
+    setSavedKeywords(data ?? [])
+  }, [])
+
+  useEffect(() => { fetchSavedKeywords() }, [fetchSavedKeywords])
+
+  useEffect(() => {
+    if (!keywordDropOpen) return
+    const handler = (e) => {
+      if (keywordWrapRef.current && !keywordWrapRef.current.contains(e.target)) {
+        setKeywordDropOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [keywordDropOpen])
+
+  const handleSaveKeyword = async () => {
+    const val = keyword.trim()
+    if (!val) return
+    setKeywordSaveError('')
+    const { error } = await supabase.from('keywords_table').insert({ keywords: val })
+    if (error) {
+      setKeywordSaveError('Keyword already exists.')
+      return
+    }
+    await fetchSavedKeywords()
+  }
+
+  const handleDeleteKeyword = async (id) => {
+    await supabase.from('keywords_table').delete().eq('id', id)
+    setSavedKeywords((prev) => prev.filter((k) => k.id !== id))
+  }
+
+  const filteredKeywords = keyword.trim()
+    ? savedKeywords.filter((k) => k.keywords.toLowerCase().includes(keyword.trim().toLowerCase()))
+    : savedKeywords
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -1228,6 +1276,7 @@ function App() {
       keyword:      keyword,
       countryValue: selectedCountry?.id   ?? '',
       countryText:  selectedCountry?.name ?? '',
+      pages:        pages,
     }
 
     setModal({ phase: 'loading' })
@@ -1484,13 +1533,30 @@ function App() {
 
       <div className="search-card">
         <form className="search-bar" onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}>
-          <input
-            type="text"
-            className="input-keyword"
-            placeholder="Keyword"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
+          <div className="keyword-wrap" ref={keywordWrapRef}>
+            <input
+              type="text"
+              className="input-keyword"
+              placeholder="Keyword"
+              value={keyword}
+              onChange={(e) => { setKeyword(e.target.value); setKeywordSaveError('') }}
+              onFocus={() => setKeywordDropOpen(true)}
+            />
+            {keyword.trim() && (
+              <button type="button" className="keyword-save-btn" title="Save keyword" onClick={handleSaveKeyword}>＋</button>
+            )}
+            {keywordDropOpen && filteredKeywords.length > 0 && (
+              <div className="keyword-dropdown">
+                {filteredKeywords.map((k) => (
+                  <div key={k.id} className="keyword-option">
+                    <span className="keyword-option-text" onMouseDown={() => { setKeyword(k.keywords); setKeywordDropOpen(false) }}>{k.keywords}</span>
+                    <button type="button" className="keyword-delete-btn" title="Delete keyword" onMouseDown={(e) => { e.stopPropagation(); handleDeleteKeyword(k.id) }}>－</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {keywordSaveError && <div className="keyword-save-error">{keywordSaveError}</div>}
+          </div>
 
           <select
             className="select-country"
@@ -1500,8 +1566,18 @@ function App() {
             <option value="" disabled>Country</option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.label ? `${c.name} - ${c.label}` : c.name}
               </option>
+            ))}
+          </select>
+
+          <select
+            className="select-pages"
+            value={pages}
+            onChange={(e) => setPages(Number(e.target.value))}
+          >
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>{n} {n === 1 ? 'page' : 'pages'}</option>
             ))}
           </select>
 
