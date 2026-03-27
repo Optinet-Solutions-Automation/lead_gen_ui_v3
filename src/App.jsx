@@ -59,6 +59,16 @@ const EDITABLE_COLS = {
   },
   affiliate_name: { type: 'text' },
   batch_id:       { type: 'text' },
+  remarks:        { type: 'text' },
+  status: {
+    type: 'dropdown',
+    options: [
+      { label: 'None',                        value: null  },
+      { label: 'not relevant website down',   value: 'not relevant website down'  },
+      { label: 'not relevant no links',       value: 'not relevant no links'      },
+      { label: 'not relevant BH aff',         value: 'not relevant BH aff'        },
+    ],
+  },
 }
 
 const PAGE_SIZE = 50
@@ -1756,7 +1766,7 @@ function App() {
                 </th>
                 <th className="col-view"></th>
                 {TABLE_COLUMNS.map((col) => (
-                  <th key={col.key} className={col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'is_affiliate' ? 'col-affiliate' : col.key === 'is_on_monday' ? 'col-on-monday' : col.key === 'has_contact_details' ? 'col-contact' : undefined}>
+                  <th key={col.key} className={col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'is_affiliate' ? 'col-affiliate' : col.key === 'is_on_monday' ? 'col-on-monday' : col.key === 'has_contact_details' ? 'col-contact' : col.key === 'status' ? 'col-status' : undefined}>
                     {col.label}
                   </th>
                 ))}
@@ -1815,7 +1825,7 @@ function App() {
                         value = raw ?? '?'
                       }
 
-                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'has_contact_details' ? 'col-contact' : undefined
+                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'has_contact_details' ? 'col-contact' : col.key === 'status' ? 'col-status' : undefined
                       const className = [baseClass, isEditing ? 'cell--editing' : editConf ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
 
                       return (

@@ -330,6 +330,12 @@
   min-width: 100px;
 }
 
+.leads-table th.col-status,
+.leads-table td.col-status {
+  min-width: 220px;
+  white-space: nowrap;
+}
+
 /* ── Monday.com-style toolbar ─────────────────────────── */
 .mb-toolbar {
   display: flex;
