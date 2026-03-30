@@ -336,6 +336,14 @@
   white-space: nowrap;
 }
 
+.leads-table th.col-affiliate-name,
+.leads-table td.col-affiliate-name {
+  min-width: 180px;
+  max-width: 240px;
+  white-space: normal;
+  word-wrap: break-word;
+}
+
 /* ── Monday.com-style toolbar ─────────────────────────── */
 .mb-toolbar {
   display: flex;

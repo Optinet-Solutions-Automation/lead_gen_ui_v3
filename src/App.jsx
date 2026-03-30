@@ -31,6 +31,7 @@ const TABLE_COLUMNS = [
   { key: 'is_rooster_partner', label: 'Is Rooster Partner',     noSort: true, hasFilter: true, filterType: 'boolean' },
   { key: 'has_contact_details', label: 'Has Contact Details',    noSort: true, hasFilter: true, filterType: 'boolean' },
   { key: 'has_s_tags',         label: 'Has S-Tags',             noSort: true, hasFilter: true, filterType: 'boolean' },
+  { key: 'affiliate_name',     label: 'Affiliate Name',  noSort: true, hasFilter: true, filterType: 'text' },
   { key: 'status',             label: 'Status',          noSort: true, hasFilter: true, filterType: 'text' },
   { key: 'remarks',            label: 'Remarks',         noSort: true },
 ]
@@ -64,9 +65,10 @@ const EDITABLE_COLS = {
     type: 'dropdown',
     options: [
       { label: 'None',                        value: null  },
-      { label: 'not relevant website down',   value: 'not relevant website down'  },
-      { label: 'not relevant no links',       value: 'not relevant no links'      },
-      { label: 'not relevant BH aff',         value: 'not relevant BH aff'        },
+      { label: 'Not Relevant Website Down',   value: 'Not Relevant Website Down'  },
+      { label: 'Not Relevant No Links',       value: 'Not Relevant No Links'      },
+      { label: 'Not Relevan BH Aff',          value: 'Not Relevan BH Aff'         },
+      { label: 'Not Relevant App',            value: 'Not Relevant App'           },
     ],
   },
 }
@@ -84,6 +86,8 @@ const applyFilterToQuery = (q, col, fr) => {
       case 'is not':           return q.not(column, 'ilike', value)
       case 'starts with':      return q.ilike(column, `${value}%`)
       case 'ends with':        return q.ilike(column, `%${value}`)
+      case 'is empty':         return q.is(column, null)
+      case 'is not empty':     return q.not(column, 'is', null)
       default:                 return q
     }
   }
@@ -108,11 +112,13 @@ const buildOrPart = (col, fr) => {
   const { column, condition, value } = fr
   if (col?.filterType === 'text') {
     switch (condition) {
-      case 'contains':    return `${column}.ilike.%${value}%`
-      case 'is':          return `${column}.eq.${value}`
-      case 'starts with': return `${column}.ilike.${value}%`
-      case 'ends with':   return `${column}.ilike.%${value}`
-      default:            return null
+      case 'contains':     return `${column}.ilike.%${value}%`
+      case 'is':           return `${column}.eq.${value}`
+      case 'starts with':  return `${column}.ilike.${value}%`
+      case 'ends with':    return `${column}.ilike.%${value}`
+      case 'is empty':     return `${column}.is.null`
+      case 'is not empty': return `${column}.not.is.null`
+      default:             return null
     }
   }
   if (col?.filterType === 'boolean') {
@@ -447,6 +453,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
     { label: 'Overall Position', value: row.overall_position ?? '—' },
     { label: 'Result Type',      value: row.result_type      ?? '—' },
     { label: 'Rooster Partner',  value: roosterLabel },
+    { label: 'Brand',            value: row.brand ?? '—' },
     { label: 'Affiliate Name',   value: row.affiliate_name ?? '—' },
     { label: 'Status',           value: row.status   ?? '—' },
     { label: 'Remarks',          value: row.remarks  ?? '—' },
@@ -505,7 +512,7 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
               onCollectSTags(row)
             }}>Collect S-Tags</button>
             <span style={{ color: '#9ca3af', fontWeight: 600 }}>›</span>
-            <button className="btn-modal-cancel" onClick={() => onCheckSTags(sTags)}>Check S-Tags</button>
+            <button className="btn-modal-cancel" onClick={() => onCheckSTags(sTags, row)}>Check S-Tags</button>
           </div>
 
           {sTagsLoading ? (
@@ -1047,7 +1054,8 @@ function App() {
       loadingMoreRef.current = true
     }
 
-    const validFilters = filterRowsRef.current.filter((fr) => fr.column && fr.value)
+    const NO_VALUE_CONDS = new Set(['is empty', 'is not empty'])
+    const validFilters = filterRowsRef.current.filter((fr) => fr.column && (fr.value || NO_VALUE_CONDS.has(fr.condition)))
     const validSorts   = sortRowsRef.current.filter((sr) => sr.column)
     const connector    = filterConnectorRef.current
     const term         = searchRef.current.trim()
@@ -1120,7 +1128,7 @@ function App() {
     return () => document.removeEventListener('mousedown', handler)
   }, [filterPanelOpen, sortPanelOpen])
 
-  const TEXT_CONDITIONS = ['contains', 'does not contain', 'is', 'is not', 'starts with', 'ends with']
+  const TEXT_CONDITIONS = ['contains', 'does not contain', 'is', 'is not', 'starts with', 'ends with', 'is empty', 'is not empty']
 
   const DESCENDING_COLS = new Set(['id', 'batch_id'])
   const getUniqueValues = (colKey) => [...new Set(leads.map((r) => r[colKey]).filter(Boolean))].sort((a, b) => {
@@ -1152,7 +1160,8 @@ function App() {
   const removeSortRow = (id) => setSortRows((prev) => prev.filter((r) => r.id !== id))
   const updateSortRow = (id, patch) => setSortRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r))
 
-  const activeFilterRows = filterRows.filter((fr) => fr.column && fr.value)
+  const NO_VALUE_CONDITIONS = new Set(['is empty', 'is not empty'])
+  const activeFilterRows = filterRows.filter((fr) => fr.column && (fr.value || NO_VALUE_CONDITIONS.has(fr.condition)))
   const activeSortRows   = sortRows.filter((sr) => sr.column)
 
   // Stable serialized keys — only change when complete (column+value) rows change
@@ -1676,7 +1685,7 @@ function App() {
 
                     {fr.column && (
                       isTextColumn(fr.column) ? (
-                        <input
+                        !NO_VALUE_CONDITIONS.has(fr.condition) && <input
                           className="mb-value-input"
                           type="text"
                           placeholder="Value"
@@ -1766,7 +1775,7 @@ function App() {
                 </th>
                 <th className="col-view"></th>
                 {TABLE_COLUMNS.map((col) => (
-                  <th key={col.key} className={col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'is_affiliate' ? 'col-affiliate' : col.key === 'is_on_monday' ? 'col-on-monday' : col.key === 'has_contact_details' ? 'col-contact' : col.key === 'status' ? 'col-status' : undefined}>
+                  <th key={col.key} className={col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'is_affiliate' ? 'col-affiliate' : col.key === 'is_on_monday' ? 'col-on-monday' : col.key === 'has_contact_details' ? 'col-contact' : col.key === 'status' ? 'col-status' : col.key === 'affiliate_name' ? 'col-affiliate-name' : undefined}>
                     {col.label}
                   </th>
                 ))}
@@ -1825,7 +1834,7 @@ function App() {
                         value = raw ?? '?'
                       }
 
-                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'has_contact_details' ? 'col-contact' : col.key === 'status' ? 'col-status' : undefined
+                      const baseClass = col.key === 'remarks' ? 'col-remarks' : col.key === 'url' ? 'col-url' : col.key === 'domain' ? 'col-domain' : col.key === 'has_s_tags' ? 'col-stag' : col.key === 'is_rooster_partner' ? 'col-rooster' : col.key === 'has_contact_details' ? 'col-contact' : col.key === 'status' ? 'col-status' : col.key === 'affiliate_name' ? 'col-affiliate-name' : undefined
                       const className = [baseClass, isEditing ? 'cell--editing' : editConf ? 'cell--editable' : ''].filter(Boolean).join(' ') || undefined
 
                       return (
@@ -1938,7 +1947,7 @@ function App() {
         onLeadUpdate={handleLeadUpdate}
         onError={(msg) => setModal({ phase: 'error', data: { message: msg } })}
         profileRefreshKey={profileRefreshKey}
-        onCheckSTags={(sTags) => sendToWebhook(N8N_CHECK_STAGS_WEBHOOK, sTags.map((t) => ({ s_tag_autoinc_id: t.s_tag_autoinc_id, s_tag_id: t.s_tag_id, s_tag: t.s_tag, brand: t.brand })))}
+        onCheckSTags={(sTags, row) => sendToWebhook(N8N_CHECK_STAGS_WEBHOOK, sTags.map((t) => ({ id: row.id, s_tag_autoinc_id: t.s_tag_autoinc_id, s_tag_id: t.s_tag_id, s_tag: t.s_tag, brand: t.brand })))}
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, [{ id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }])}
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, [{ id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }])}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
