@@ -87,7 +87,21 @@
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   z-index: 200;
-  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.input-keyword--disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.keyword-loading {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: #9ca3af;
+  text-align: center;
 }
 
 .keyword-option {

@@ -962,7 +962,12 @@ function App() {
   const [savedKeywords, setSavedKeywords]       = useState([])
   const [keywordDropOpen, setKeywordDropOpen]   = useState(false)
   const [keywordSaveError, setKeywordSaveError] = useState('')
-  const keywordWrapRef = useRef(null)
+  const [kwOffset, setKwOffset]                 = useState(0)
+  const [kwHasMore, setKwHasMore]               = useState(true)
+  const [kwLoadingMore, setKwLoadingMore]       = useState(false)
+  const keywordWrapRef  = useRef(null)
+  const kwDropRef       = useRef(null)
+  const KW_PAGE_SIZE    = 20
   const [search, setSearch]   = useState('')
   const [leads, setLeads]         = useState([])
   const [selectedRows, setSelectedRows] = useState(new Set())
@@ -1238,16 +1243,36 @@ function App() {
 
   const canSubmit = keyword.trim() !== '' && country !== '' && pages >= 1
 
-  const fetchSavedKeywords = useCallback(async () => {
-    const { data } = await supabase
+  const getSelectedCountryName = () => countries.find((c) => c.id === country)?.name ?? null
+
+  const fetchSavedKeywords = useCallback(async (reset = true, searchTerm = '', countryName = '') => {
+    if (!countryName) return
+    const from = reset ? 0 : kwOffset
+    if (!reset && kwLoadingMore) return
+    if (!reset) setKwLoadingMore(true)
+
+    let q = supabase
       .from('keywords_table')
       .select('id, keywords')
+      .eq('country', countryName)
       .order('id', { ascending: false })
-      .limit(10)
-    setSavedKeywords(data ?? [])
-  }, [])
+      .range(from, from + KW_PAGE_SIZE - 1)
 
-  useEffect(() => { fetchSavedKeywords() }, [fetchSavedKeywords])
+    if (searchTerm.trim()) q = q.ilike('keywords', `%${searchTerm.trim()}%`)
+
+    const { data } = await q
+    const rows = data ?? []
+
+    if (reset) {
+      setSavedKeywords(rows)
+      setKwOffset(rows.length)
+    } else {
+      setSavedKeywords((prev) => [...prev, ...rows])
+      setKwOffset(from + rows.length)
+      setKwLoadingMore(false)
+    }
+    setKwHasMore(rows.length === KW_PAGE_SIZE)
+  }, [kwOffset, kwLoadingMore, KW_PAGE_SIZE])
 
   useEffect(() => {
     if (!keywordDropOpen) return
@@ -1260,26 +1285,31 @@ function App() {
     return () => document.removeEventListener('mousedown', handler)
   }, [keywordDropOpen])
 
+  // Lazy load more keywords when user scrolls to bottom of dropdown
+  const handleKwDropScroll = (e) => {
+    const el = e.currentTarget
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20 && kwHasMore && !kwLoadingMore) {
+      fetchSavedKeywords(false, keyword, getSelectedCountryName())
+    }
+  }
+
   const handleSaveKeyword = async () => {
     const val = keyword.trim()
-    if (!val) return
+    const countryName = getSelectedCountryName()
+    if (!val || !countryName) return
     setKeywordSaveError('')
-    const { error } = await supabase.from('keywords_table').insert({ keywords: val })
+    const { error } = await supabase.from('keywords_table').insert({ keywords: val, country: countryName })
     if (error) {
       setKeywordSaveError('Keyword already exists.')
       return
     }
-    await fetchSavedKeywords()
+    fetchSavedKeywords(true, keyword, countryName)
   }
 
   const handleDeleteKeyword = async (id) => {
     await supabase.from('keywords_table').delete().eq('id', id)
     setSavedKeywords((prev) => prev.filter((k) => k.id !== id))
   }
-
-  const filteredKeywords = keyword.trim()
-    ? savedKeywords.filter((k) => k.keywords.toLowerCase().includes(keyword.trim().toLowerCase()))
-    : savedKeywords
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -1555,23 +1585,33 @@ function App() {
           <div className="keyword-wrap" ref={keywordWrapRef}>
             <input
               type="text"
-              className="input-keyword"
-              placeholder="Keyword"
+              className={`input-keyword${!country ? ' input-keyword--disabled' : ''}`}
+              placeholder={country ? 'Keyword' : 'Select a country first'}
               value={keyword}
-              onChange={(e) => { setKeyword(e.target.value); setKeywordSaveError('') }}
-              onFocus={() => setKeywordDropOpen(true)}
+              disabled={!country}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setKeywordSaveError('')
+                if (country) fetchSavedKeywords(true, e.target.value, getSelectedCountryName())
+              }}
+              onFocus={() => {
+                if (!country) return
+                setKeywordDropOpen(true)
+                fetchSavedKeywords(true, keyword, getSelectedCountryName())
+              }}
             />
-            {keyword.trim() && (
+            {keyword.trim() && country && (
               <button type="button" className="keyword-save-btn" title="Save keyword" onClick={handleSaveKeyword}>＋</button>
             )}
-            {keywordDropOpen && filteredKeywords.length > 0 && (
-              <div className="keyword-dropdown">
-                {filteredKeywords.map((k) => (
+            {keywordDropOpen && savedKeywords.length > 0 && (
+              <div className="keyword-dropdown" ref={kwDropRef} onScroll={handleKwDropScroll}>
+                {savedKeywords.map((k) => (
                   <div key={k.id} className="keyword-option">
                     <span className="keyword-option-text" onMouseDown={() => { setKeyword(k.keywords); setKeywordDropOpen(false) }}>{k.keywords}</span>
                     <button type="button" className="keyword-delete-btn" title="Delete keyword" onMouseDown={(e) => { e.stopPropagation(); handleDeleteKeyword(k.id) }}>－</button>
                   </div>
                 ))}
+                {kwLoadingMore && <div className="keyword-loading">Loading...</div>}
               </div>
             )}
             {keywordSaveError && <div className="keyword-save-error">{keywordSaveError}</div>}
@@ -1580,7 +1620,13 @@ function App() {
           <select
             className="select-country"
             value={country}
-            onChange={(e) => setCountry(e.target.value)}
+            onChange={(e) => {
+              setCountry(e.target.value)
+              setSavedKeywords([])
+              setKwOffset(0)
+              setKwHasMore(true)
+              setKeywordDropOpen(false)
+            }}
           >
             <option value="" disabled>Country</option>
             {countries.map((c) => (
