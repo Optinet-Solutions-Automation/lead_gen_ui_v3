@@ -68,7 +68,9 @@ const EDITABLE_COLS = {
       { label: 'Not Relevant Website Down',   value: 'Not Relevant Website Down'  },
       { label: 'Not Relevant No Links',       value: 'Not Relevant No Links'      },
       { label: 'Not Relevan BH Aff',          value: 'Not Relevan BH Aff'         },
-      { label: 'Not Relevant App',            value: 'Not Relevant App'           },
+      { label: 'Not Relevant App',                          value: 'Not Relevant App'                          },
+      { label: 'Not Relevant - Generic Site With No Links', value: 'Not Relevant - Generic Site With No Links' },
+      { label: 'Not Relevant Country', value: 'Not Relevant Country' },
     ],
   },
 }
@@ -107,23 +109,26 @@ const applyFilterToQuery = (q, col, fr) => {
   return q.ilike(column, value)
 }
 
-// Build a single OR part string for Supabase .or()
-const buildOrPart = (col, fr) => {
+// Build a PostgREST condition string for a single filter row (used in .or() calls)
+const buildConditionStr = (col, fr) => {
   const { column, condition, value } = fr
   if (col?.filterType === 'text') {
     switch (condition) {
-      case 'contains':     return `${column}.ilike.%${value}%`
-      case 'is':           return `${column}.eq.${value}`
-      case 'starts with':  return `${column}.ilike.${value}%`
-      case 'ends with':    return `${column}.ilike.%${value}`
-      case 'is empty':     return `${column}.is.null`
-      case 'is not empty': return `${column}.not.is.null`
-      default:             return null
+      case 'contains':         return `${column}.ilike.%${value}%`
+      case 'does not contain': return `not.${column}.ilike.%${value}%`
+      case 'is':               return `${column}.ilike.${value}`
+      case 'is not':           return `not.${column}.ilike.${value}`
+      case 'starts with':      return `${column}.ilike.${value}%`
+      case 'ends with':        return `${column}.ilike.%${value}`
+      case 'is empty':         return `${column}.is.null`
+      case 'is not empty':     return `not.${column}.is.null`
+      default:                 return null
     }
   }
   if (col?.filterType === 'boolean') {
-    if (value === 'Yes') return `${column}.eq.true`
-    if (value === 'No')  return `${column}.eq.false`
+    if (value === 'Yes')     return `${column}.eq.true`
+    if (value === 'No')      return `${column}.eq.false`
+    if (value === 'Not Set') return `${column}.is.null`
     return null
   }
   if (col?.filterType === 'presence') {
@@ -131,8 +136,119 @@ const buildOrPart = (col, fr) => {
     if (value === 'No')  return `${column}.is.null`
     return null
   }
+  if (col?.filterType === 'exact') return `${column}.eq.${value}`
   if (value === 'Not Set') return `${column}.is.null`
   return `${column}.eq.${value}`
+}
+
+// Group filter rows into AND-groups split at OR connectors
+const groupFilterRows = (rows) => {
+  const groups = [[]]
+  rows.forEach((row, i) => {
+    groups[groups.length - 1].push(row)
+    if ((row.connector ?? 'AND') === 'OR' && i < rows.length - 1) {
+      groups.push([])
+    }
+  })
+  return groups.filter((g) => g.length > 0)
+}
+
+// Apply grouped filters to a Supabase query
+const applyGroupedFilters = (q, validFilters) => {
+  if (validFilters.length === 0) return q
+  const groups = groupFilterRows(validFilters)
+  if (groups.length === 1) {
+    // Pure AND — chain directly
+    groups[0].forEach((fr) => {
+      const col = TABLE_COLUMNS.find((c) => c.key === fr.column)
+      q = applyFilterToQuery(q, col, fr)
+    })
+    return q
+  }
+  // Multiple groups: AND within each group, OR between groups
+  const groupStrings = groups.map((group) => {
+    const parts = group.map((fr) => {
+      const col = TABLE_COLUMNS.find((c) => c.key === fr.column)
+      return buildConditionStr(col, fr)
+    }).filter(Boolean)
+    if (parts.length === 0) return null
+    if (parts.length === 1) return parts[0]
+    return `and(${parts.join(',')})`
+  }).filter(Boolean)
+  if (groupStrings.length > 0) q = q.or(groupStrings.join(','))
+  return q
+}
+
+// Apply filter groups (each group has its own rows + groupConnector to the next group)
+const applyFilterGroupsV2 = (groups, q) => {
+  const NO_VALUE_CONDS = new Set(['is empty', 'is not empty'])
+
+  const activeGroups = groups
+    .map(g => ({
+      ...g,
+      rows: g.rows.filter(fr => fr.column && (fr.value || NO_VALUE_CONDS.has(fr.condition)))
+    }))
+    .filter(g => g.rows.length > 0)
+
+  if (activeGroups.length === 0) return q
+
+  // Check if there are any OR connectors between groups
+  const hasOrBetweenGroups = activeGroups.slice(0, -1).some(g => g.groupConnector === 'OR')
+
+  if (!hasOrBetweenGroups) {
+    // Pure AND between groups: apply each group to the query sequentially
+    for (const group of activeGroups) {
+      q = applyGroupedFilters(q, group.rows)
+    }
+    return q
+  }
+
+  // Has OR between groups — build PostgREST condition strings
+  // Build condition result for a single group's rows
+  const buildGroupCondResult = (group) => {
+    const subGroups = groupFilterRows(group.rows)
+    const subGroupParts = subGroups.map(sg => {
+      const parts = sg.map(fr => {
+        const col = TABLE_COLUMNS.find(c => c.key === fr.column)
+        return buildConditionStr(col, fr)
+      }).filter(Boolean)
+      if (parts.length === 0) return null
+      if (parts.length === 1) return parts[0]
+      return `and(${parts.join(',')})`
+    }).filter(Boolean)
+    if (subGroupParts.length === 0) return null
+    return { parts: subGroupParts, hasInternalOr: subGroupParts.length > 1 }
+  }
+
+  // Split activeGroups at OR-between-group boundaries into OR-segments
+  const orSegments = [[]]
+  activeGroups.forEach((g, i) => {
+    orSegments[orSegments.length - 1].push(g)
+    if (i < activeGroups.length - 1 && g.groupConnector === 'OR') {
+      orSegments.push([])
+    }
+  })
+
+  // Build condition string for a segment (AND of multiple groups)
+  const buildSegmentStr = (segment) => {
+    const allParts = []
+    for (const g of segment) {
+      const result = buildGroupCondResult(g)
+      if (!result) continue
+      if (result.hasInternalOr) {
+        allParts.push(`or(${result.parts.join(',')})`)
+      } else {
+        allParts.push(...result.parts)
+      }
+    }
+    if (allParts.length === 0) return null
+    if (allParts.length === 1) return allParts[0]
+    return `and(${allParts.join(',')})`
+  }
+
+  const segmentStrs = orSegments.map(seg => buildSegmentStr(seg)).filter(Boolean)
+  if (segmentStrs.length === 0) return q
+  return q.or(segmentStrs.join(','))
 }
 
 
@@ -869,21 +985,23 @@ function BatchSelectModal({ batchModal, onSelectChange, onConfirm, onCancel }) {
           <>
             <h2 className="modal-title">{batchModal.title}</h2>
             <p className="modal-message">{batchModal.desc}</p>
-            <select
-              className="select-batch"
-              value={batchModal.selected}
-              onChange={(e) => onSelectChange(e.target.value)}
-            >
-              <option value="" disabled>Select Batch ID</option>
+            <div className="batch-checkbox-list">
               {batchModal.batchIds.map((id) => (
-                <option key={id} value={id}>{id}</option>
+                <label key={id} className="batch-checkbox-item">
+                  <input
+                    type="checkbox"
+                    checked={batchModal.selected.includes(id)}
+                    onChange={() => onSelectChange(id)}
+                  />
+                  <span>{id}</span>
+                </label>
               ))}
-            </select>
+            </div>
             <div className="modal-actions">
               <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
               <button
                 className="modal-close-btn"
-                disabled={!batchModal.selected}
+                disabled={batchModal.selected.length === 0}
                 onClick={() => onConfirm(batchModal.selected)}
               >
                 Run
@@ -985,9 +1103,8 @@ function App() {
   const [deleteConfirm, setDeleteConfirm]   = useState(false)
   const [deleting, setDeleting]             = useState(false)
   const [dynamicFilterOptions, setDynamicFilterOptions] = useState({})
-  const [filterRows, setFilterRows]         = useState([])  // [{ id, column, condition, value }]
+  const [filterGroups, setFilterGroups]     = useState([{ id: 1, groupConnector: 'AND', rows: [] }])  // [{ id, groupConnector, rows: [{id, column, condition, value, connector}] }]
   const [sortRows, setSortRows]             = useState([])  // [{ id, column, direction }]
-  const [filterConnector, setFilterConnector] = useState('AND')
   const [filterPanelOpen, setFilterPanelOpen] = useState(false)
   const [sortPanelOpen, setSortPanelOpen]     = useState(false)
   const filterPanelRef = useRef(null)
@@ -1000,9 +1117,8 @@ function App() {
   const sentinelRef     = useRef(null)
   const loadingMoreRef  = useRef(false)
   const hasMoreRef      = useRef(true)
-  const filterRowsRef   = useRef([])
+  const filterGroupsRef = useRef([{ id: 1, groupConnector: 'AND', rows: [] }])
   const sortRowsRef     = useRef([])
-  const filterConnectorRef = useRef('AND')
   const searchRef       = useRef('')
 
   const stopPolling = () => {
@@ -1038,9 +1154,8 @@ function App() {
   }
 
   // Keep refs in sync with state so fetchLeads (stable callback) always reads latest values
-  useEffect(() => { filterRowsRef.current = filterRows },       [filterRows])
+  useEffect(() => { filterGroupsRef.current = filterGroups }, [filterGroups])
   useEffect(() => { sortRowsRef.current = sortRows },           [sortRows])
-  useEffect(() => { filterConnectorRef.current = filterConnector }, [filterConnector])
   useEffect(() => { searchRef.current = search },               [search])
 
   const fetchLeads = useCallback(async (reset = true) => {
@@ -1059,29 +1174,13 @@ function App() {
       loadingMoreRef.current = true
     }
 
-    const NO_VALUE_CONDS = new Set(['is empty', 'is not empty'])
-    const validFilters = filterRowsRef.current.filter((fr) => fr.column && (fr.value || NO_VALUE_CONDS.has(fr.condition)))
-    const validSorts   = sortRowsRef.current.filter((sr) => sr.column)
-    const connector    = filterConnectorRef.current
-    const term         = searchRef.current.trim()
+    const validSorts = sortRowsRef.current.filter((sr) => sr.column)
+    const term       = searchRef.current.trim()
 
     let q = supabase.from('google_lead_gen_table').select('*').range(from, from + PAGE_SIZE - 1)
 
-    // Apply filters
-    if (validFilters.length > 0) {
-      if (connector === 'AND') {
-        validFilters.forEach((fr) => {
-          const col = TABLE_COLUMNS.find((c) => c.key === fr.column)
-          q = applyFilterToQuery(q, col, fr)
-        })
-      } else {
-        const parts = validFilters.map((fr) => {
-          const col = TABLE_COLUMNS.find((c) => c.key === fr.column)
-          return buildOrPart(col, fr)
-        }).filter(Boolean)
-        if (parts.length > 0) q = q.or(parts.join(','))
-      }
-    }
+    // Apply filter groups
+    q = applyFilterGroupsV2(filterGroupsRef.current, q)
 
     // Apply search across key columns
     if (term.length >= 3) {
@@ -1157,21 +1256,54 @@ function App() {
     return col?.filterType === 'text'
   }
 
-  const addFilterRow = () => setFilterRows((prev) => [...prev, { id: Date.now(), column: '', condition: 'contains', value: '' }])
-  const removeFilterRow = (id) => setFilterRows((prev) => prev.filter((r) => r.id !== id))
-  const updateFilterRow = (id, patch) => setFilterRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r))
+  const addFilterRow = (groupId) => setFilterGroups((prev) =>
+    prev.map(g => g.id === groupId
+      ? { ...g, rows: [...g.rows, { id: Date.now(), column: '', condition: 'contains', value: '', connector: 'AND' }] }
+      : g
+    )
+  )
+  const removeFilterRow = (groupId, rowId) => setFilterGroups((prev) =>
+    prev.map(g => g.id === groupId ? { ...g, rows: g.rows.filter(r => r.id !== rowId) } : g)
+  )
+  const updateFilterRow = (groupId, rowId, patch) => setFilterGroups((prev) =>
+    prev.map(g => g.id === groupId
+      ? { ...g, rows: g.rows.map(r => r.id === rowId ? { ...r, ...patch } : r) }
+      : g
+    )
+  )
+  const addFilterGroup = () => setFilterGroups((prev) => [...prev, { id: Date.now(), groupConnector: 'AND', rows: [] }])
+  const removeFilterGroup = (groupId) => setFilterGroups((prev) => {
+    const filtered = prev.filter(g => g.id !== groupId)
+    return filtered.length === 0 ? [{ id: Date.now(), groupConnector: 'AND', rows: [] }] : filtered
+  })
+  const updateGroupConnector = (groupId, connector) => setFilterGroups((prev) =>
+    prev.map(g => g.id === groupId ? { ...g, groupConnector: connector } : g)
+  )
 
   const addSortRow = () => setSortRows((prev) => [...prev, { id: Date.now(), column: '', direction: 'asc' }])
   const removeSortRow = (id) => setSortRows((prev) => prev.filter((r) => r.id !== id))
   const updateSortRow = (id, patch) => setSortRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r))
 
   const NO_VALUE_CONDITIONS = new Set(['is empty', 'is not empty'])
-  const activeFilterRows = filterRows.filter((fr) => fr.column && (fr.value || NO_VALUE_CONDITIONS.has(fr.condition)))
-  const activeSortRows   = sortRows.filter((sr) => sr.column)
+  const activeSortRows = sortRows.filter((sr) => sr.column)
 
-  // Stable serialized keys — only change when complete (column+value) rows change
-  const activeFiltersKey = useMemo(() => JSON.stringify(activeFilterRows), [activeFilterRows])
-  const activeSortsKey   = useMemo(() => JSON.stringify(activeSortRows),   [activeSortRows])
+  const activeFilterCount = useMemo(() =>
+    filterGroups.reduce((sum, g) =>
+      sum + g.rows.filter(fr => fr.column && (fr.value || NO_VALUE_CONDITIONS.has(fr.condition))).length, 0
+    ), [filterGroups]
+  )
+
+  // Stable serialized key — only changes when complete (column+value) filter rows change
+  const activeFiltersKey = useMemo(() => {
+    const active = filterGroups
+      .map(g => ({
+        ...g,
+        rows: g.rows.filter(fr => fr.column && (fr.value || NO_VALUE_CONDITIONS.has(fr.condition)))
+      }))
+      .filter(g => g.rows.length > 0)
+    return JSON.stringify(active)
+  }, [filterGroups])
+  const activeSortsKey = useMemo(() => JSON.stringify(activeSortRows), [activeSortRows])
 
   const selectableLeads = leads
   const allSelected  = selectableLeads.length > 0 && selectedRows.size === selectableLeads.length
@@ -1199,7 +1331,7 @@ function App() {
     }
     const t = setTimeout(() => fetchLeads(true), 350)
     return () => clearTimeout(t)
-  }, [activeFiltersKey, activeSortsKey, filterConnector, search, fetchLeads])
+  }, [activeFiltersKey, activeSortsKey, search, fetchLeads])
 
   // Infinite scroll — load next page when sentinel enters viewport
   useEffect(() => {
@@ -1413,7 +1545,7 @@ function App() {
       return
     }
 
-    setBatchModal((prev) => ({ ...prev, phase: 'select', batchIds, selected: batchIds[0] }))
+    setBatchModal((prev) => ({ ...prev, phase: 'select', batchIds, selected: [] }))
   }
 
   const commitCellEdit = async () => {
@@ -1557,17 +1689,17 @@ function App() {
     if (onSuccess) onSuccess()
   }
 
-  const handleBatchConfirm = async (batchId) => {
+  const handleBatchConfirm = async (batchIds) => {
     setBatchModal(null)
 
     const selectFields = ['id', 'url', 'domain', 'status', ...pendingExtraFields].join(', ')
     const { data, error } = await supabase
       .from('google_lead_gen_table')
       .select(selectFields)
-      .eq('batch_id', batchId)
+      .in('batch_id', batchIds)
 
     if (error) {
-      setModal({ phase: 'error', data: { message: 'Failed to fetch records for the selected batch.' } })
+      setModal({ phase: 'error', data: { message: 'Failed to fetch records for the selected batches.' } })
       return
     }
 
@@ -1685,12 +1817,12 @@ function App() {
           {/* Filter */}
           <div className="mb-toolbar-item-wrap" ref={filterPanelRef}>
             <button
-              className={`mb-toolbar-btn${activeFilterRows.length > 0 ? ' mb-toolbar-btn--active' : ''}`}
+              className={`mb-toolbar-btn${activeFilterCount > 0 ? ' mb-toolbar-btn--active' : ''}`}
               onClick={() => { setFilterPanelOpen((v) => !v); setSortPanelOpen(false) }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
               Filter
-              {activeFilterRows.length > 0 && <span className="mb-badge">{activeFilterRows.length}</span>}
+              {activeFilterCount > 0 && <span className="mb-badge">{activeFilterCount}</span>}
             </button>
 
             {filterPanelOpen && (
@@ -1698,59 +1830,84 @@ function App() {
                 <div className="mb-panel-header">
                   <span className="mb-panel-title">Advanced filters <span className="mb-panel-count">{leads.length} leads loaded</span></span>
                   <div className="mb-panel-header-actions">
-                    {activeFilterRows.length > 0 && <button className="mb-panel-clear" onClick={() => setFilterRows([])}>Clear all</button>}
+                    {activeFilterCount > 0 && <button className="mb-panel-clear" onClick={() => setFilterGroups([{ id: Date.now(), groupConnector: 'AND', rows: [] }])}>Clear all</button>}
                   </div>
                 </div>
 
-                {filterRows.map((fr, idx) => (
-                  <div key={fr.id} className="mb-panel-row">
-                    {idx === 0
-                      ? <span className="mb-row-label">Where</span>
-                      : (
+                {filterGroups.map((group, groupIdx) => (
+                  <div key={group.id} className="mb-filter-group">
+                    {groupIdx > 0 && (
+                      <div className="mb-group-connector-wrap">
                         <button
-                          className="mb-connector-btn"
-                          onClick={() => setFilterConnector((v) => v === 'AND' ? 'OR' : 'AND')}
-                        >{filterConnector}</button>
-                      )
-                    }
-                    <select className="mb-select" value={fr.column} onChange={(e) => {
-                      const col = TABLE_COLUMNS.find((c) => c.key === e.target.value)
-                      updateFilterRow(fr.id, { column: e.target.value, condition: col?.filterType === 'text' ? 'contains' : 'is', value: '' })
-                    }}>
-                      <option value="">Column</option>
-                      {TABLE_COLUMNS.filter((c) => c.hasFilter).map((c) => (
-                        <option key={c.key} value={c.key}>{c.label}</option>
+                          className={`mb-group-connector-btn${group.groupConnector === 'OR' ? ' mb-group-connector-btn--or' : ''}`}
+                          onClick={() => updateGroupConnector(group.id, group.groupConnector === 'AND' ? 'OR' : 'AND')}
+                        >
+                          {group.groupConnector}
+                        </button>
+                      </div>
+                    )}
+                    <div className="mb-filter-group-box">
+                      <div className="mb-filter-group-header">
+                        <span className="mb-filter-group-label">Group {groupIdx + 1}</span>
+                        {filterGroups.length > 1 && (
+                          <button className="mb-filter-group-remove" onClick={() => removeFilterGroup(group.id)}>Remove group</button>
+                        )}
+                      </div>
+
+                      {group.rows.map((fr, rowIdx) => (
+                        <div key={fr.id} className="mb-panel-row">
+                          {rowIdx === 0
+                            ? <span className="mb-row-label">Where</span>
+                            : (
+                              <button
+                                className={`mb-connector-btn${(group.rows[rowIdx - 1]?.connector ?? 'AND') === 'OR' ? ' mb-connector-btn--or' : ''}`}
+                                onClick={() => updateFilterRow(group.id, group.rows[rowIdx - 1].id, { connector: (group.rows[rowIdx - 1]?.connector ?? 'AND') === 'AND' ? 'OR' : 'AND' })}
+                              >{group.rows[rowIdx - 1]?.connector ?? 'AND'}</button>
+                            )
+                          }
+                          <select className="mb-select" value={fr.column} onChange={(e) => {
+                            const col = TABLE_COLUMNS.find((c) => c.key === e.target.value)
+                            updateFilterRow(group.id, fr.id, { column: e.target.value, condition: col?.filterType === 'text' ? 'contains' : 'is', value: '' })
+                          }}>
+                            <option value="">Column</option>
+                            {TABLE_COLUMNS.filter((c) => c.hasFilter).map((c) => (
+                              <option key={c.key} value={c.key}>{c.label}</option>
+                            ))}
+                          </select>
+
+                          {fr.column && isTextColumn(fr.column) && (
+                            <select className="mb-select mb-select--condition" value={fr.condition} onChange={(e) => updateFilterRow(group.id, fr.id, { condition: e.target.value })}>
+                              {TEXT_CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          )}
+
+                          {fr.column && (
+                            isTextColumn(fr.column) ? (
+                              !NO_VALUE_CONDITIONS.has(fr.condition) && <input
+                                className="mb-value-input"
+                                type="text"
+                                placeholder="Value"
+                                value={fr.value}
+                                onChange={(e) => updateFilterRow(group.id, fr.id, { value: e.target.value })}
+                              />
+                            ) : (
+                              <select className="mb-select mb-select--value" value={fr.value} onChange={(e) => updateFilterRow(group.id, fr.id, { value: e.target.value })}>
+                                <option value="" disabled>Value</option>
+                                {getValueOptions(fr.column).map((v) => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            )
+                          )}
+
+                          <button className="mb-row-remove" onClick={() => removeFilterRow(group.id, fr.id)}>✕</button>
+                        </div>
                       ))}
-                    </select>
 
-                    {fr.column && isTextColumn(fr.column) && (
-                      <select className="mb-select mb-select--condition" value={fr.condition} onChange={(e) => updateFilterRow(fr.id, { condition: e.target.value })}>
-                        {TEXT_CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    )}
-
-                    {fr.column && (
-                      isTextColumn(fr.column) ? (
-                        !NO_VALUE_CONDITIONS.has(fr.condition) && <input
-                          className="mb-value-input"
-                          type="text"
-                          placeholder="Value"
-                          value={fr.value}
-                          onChange={(e) => updateFilterRow(fr.id, { value: e.target.value })}
-                        />
-                      ) : (
-                        <select className="mb-select mb-select--value" value={fr.value} onChange={(e) => updateFilterRow(fr.id, { value: e.target.value })}>
-                          <option value="" disabled>Value</option>
-                          {getValueOptions(fr.column).map((v) => <option key={v} value={v}>{v}</option>)}
-                        </select>
-                      )
-                    )}
-
-                    <button className="mb-row-remove" onClick={() => removeFilterRow(fr.id)}>✕</button>
+                      <button className="mb-add-row-btn" onClick={() => addFilterRow(group.id)}>+ Add filter</button>
+                    </div>
                   </div>
                 ))}
 
-                <button className="mb-add-row-btn" onClick={addFilterRow}>+ New filter</button>
+                <button className="mb-add-group-btn" onClick={addFilterGroup}>+ New group</button>
               </div>
             )}
           </div>
@@ -2093,7 +2250,12 @@ function App() {
 
       <BatchSelectModal
         batchModal={batchModal}
-        onSelectChange={(val) => setBatchModal((prev) => ({ ...prev, selected: val }))}
+        onSelectChange={(id) => setBatchModal((prev) => ({
+          ...prev,
+          selected: prev.selected.includes(id)
+            ? prev.selected.filter((s) => s !== id)
+            : [...prev.selected, id]
+        }))}
         onConfirm={handleBatchConfirm}
         onCancel={() => setBatchModal(null)}
       />

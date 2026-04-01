@@ -294,7 +294,7 @@
   background: #ffffff;
   border-radius: 10px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .table-wrapper {
@@ -552,6 +552,13 @@
 }
 .mb-connector-btn:hover { background: rgba(125, 211, 252, 0.2); }
 
+.mb-connector-btn--or {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.1);
+  border-color: rgba(251, 146, 60, 0.3);
+}
+.mb-connector-btn--or:hover { background: rgba(251, 146, 60, 0.2); }
+
 .mb-select {
   padding: 0.3rem 0.5rem;
   font-size: 0.82rem;
@@ -603,6 +610,88 @@
   width: fit-content;
 }
 .mb-add-row-btn:hover { text-decoration: underline; }
+
+/* ── Filter groups ────────────────────────────────────── */
+.mb-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.mb-group-connector-wrap {
+  display: flex;
+  align-items: center;
+  padding: 0.3rem 0 0.3rem 0.5rem;
+}
+
+.mb-group-connector-btn {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7dd3fc;
+  background: rgba(125, 211, 252, 0.1);
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  transition: background 0.15s;
+}
+.mb-group-connector-btn:hover { background: rgba(125, 211, 252, 0.2); }
+.mb-group-connector-btn--or {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.1);
+  border-color: rgba(251, 146, 60, 0.3);
+}
+.mb-group-connector-btn--or:hover { background: rgba(251, 146, 60, 0.2); }
+
+.mb-filter-group-box {
+  border: 1px solid #374151;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.03);
+}
+
+.mb-filter-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.1rem;
+}
+
+.mb-filter-group-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mb-filter-group-remove {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+}
+.mb-filter-group-remove:hover { color: #ef4444; text-decoration: underline; }
+
+.mb-add-group-btn {
+  background: none;
+  border: 1px dashed #374151;
+  border-radius: 5px;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.3rem 0.75rem;
+  text-align: center;
+  width: 100%;
+  margin-top: 0.25rem;
+  transition: border-color 0.15s, color 0.15s;
+}
+.mb-add-group-btn:hover { border-color: #7dd3fc; color: #7dd3fc; }
 
 /* Body rows */
 .leads-table tbody tr {
@@ -1054,6 +1143,38 @@ td.cell--editing {
 .select-batch:focus {
   border-color: #1e4d6b;
   box-shadow: 0 0 0 3px rgba(30, 77, 107, 0.1);
+}
+
+.batch-checkbox-list {
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.batch-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #333;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.batch-checkbox-item:last-child { border-bottom: none; }
+
+.batch-checkbox-item:hover { background: #f5f8fb; }
+
+.batch-checkbox-item input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: #1e4d6b;
+  flex-shrink: 0;
 }
 
 .modal-actions {
