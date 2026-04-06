@@ -1349,17 +1349,26 @@ function App() {
     return () => observer.disconnect()
   }, [fetchLeads])
 
-  // Fetch all distinct values for dropdown filter columns from Supabase
+  // Fetch all distinct values for dropdown filter columns from Supabase (paginated)
   const fetchFilterOptions = useCallback(async () => {
     const DYNAMIC_COLS = ['batch_id', 'result_type']
+    const CHUNK = 1000
     const entries = await Promise.all(
       DYNAMIC_COLS.map(async (col) => {
-        const { data } = await supabase
-          .from('google_lead_gen_table')
-          .select(col)
-          .not(col, 'is', null)
-          .limit(2000)
-        const values = [...new Set((data ?? []).map((r) => r[col]).filter(Boolean))]
+        const allValues = new Set()
+        let from = 0
+        while (true) {
+          const { data } = await supabase
+            .from('google_lead_gen_table')
+            .select(col)
+            .not(col, 'is', null)
+            .range(from, from + CHUNK - 1)
+          if (!data || data.length === 0) break
+          data.forEach(r => { if (r[col] != null) allValues.add(r[col]) })
+          if (data.length < CHUNK) break
+          from += CHUNK
+        }
+        const values = [...allValues]
         if (col === 'batch_id') values.sort((a, b) => String(b).localeCompare(String(a), undefined, { numeric: true }))
         else values.sort()
         return [col, values]
