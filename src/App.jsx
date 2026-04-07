@@ -909,44 +909,11 @@ function ProfileModal({ profileModal, onClose, onLeadUpdate, onError, onCollectS
         </div>
 
         {/* ── Add to Monday.com ── */}
-        {(() => {
-          if (row.is_rooster_partner === true) return null
-
-          const missing = []
-          const hasSTagId = !!row.s_tag_id
-          const hasSTagRows = sTags.length > 0
-          const allSTagsNotFound = hasSTagRows && sTags.every((t) => t.status === 'Not Found on Monday.com')
-          if (!hasSTagId || !hasSTagRows) missing.push('S-Tags must be collected')
-          else if (!allSTagsNotFound) missing.push('All S-Tags must have status "Not Found on Monday.com"')
-
-          const hasContactId = !!row.contact_id
-          const hasContactRows = contacts.length > 0
-          const hasChosenEmail = contacts.some((c) => c.contact_type === 'Email' && c.is_chosen)
-          if (!hasContactId || !hasContactRows) missing.push('Contacts must be collected')
-          else if (!hasChosenEmail) missing.push('An email contact must be selected to be sent to Monday.com')
-
-          if (row.is_rooster_partner !== false) missing.push('Rooster Partner must be set to FALSE')
-
-          if (row.result_type === 'PPC') {
-            if (!row.screenshot_view_link) missing.push('Screenshot view link is missing (take a screenshot first)')
-            if (!row.screenshot_content_link) missing.push('Screenshot content link is missing (take a screenshot first)')
-          }
-
-          const canAdd = missing.length === 0
-
-          return (
-            <div className="profile-section profile-monday-section">
-              <h4 className="profile-section-title">Add to Monday.com</h4>
-              <p className="profile-monday-hint">This is the final step. Once confirmed, this lead will be added to Monday.com.</p>
-              {!canAdd && (
-                <ul className="profile-monday-missing">
-                  {missing.map((m, i) => <li key={i}>{m}</li>)}
-                </ul>
-              )}
-              <button className="btn-monday" disabled={!canAdd} onClick={() => onAddToMonday(row, sTags, contacts)}>Add Lead on Monday.com</button>
-            </div>
-          )
-        })()}
+        <div className="profile-section profile-monday-section">
+          <h4 className="profile-section-title">Add to Monday.com</h4>
+          <p className="profile-monday-hint">This is the final step. Once confirmed, this lead will be added to Monday.com.</p>
+          <button className="btn-monday" onClick={() => onAddToMonday(row, sTags, contacts)}>Add Lead on Monday.com</button>
+        </div>
 
       </div>
     </div>
