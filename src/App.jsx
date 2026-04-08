@@ -6,7 +6,6 @@ const countries   = JSON.parse(import.meta.env.VITE_COUNTRIES)
 const N8N_WEBHOOK            = import.meta.env.VITE_N8N_WEBHOOK_URL
 const N8N_DUPLICATES_WEBHOOK = import.meta.env.VITE_N8N_DUPLICATES_WEBHOOK_URL
 const N8N_MONDAY_WEBHOOK     = import.meta.env.VITE_N8N_MONDAY_WEBHOOK_URL
-const MONDAY_PASSWORD        = import.meta.env.VITE_MONDAY_PASSWORD
 const N8N_STAGS_WEBHOOK      = import.meta.env.VITE_N8N_STAGS_WEBHOOK_URL
 const N8N_ROOSTER_WEBHOOK    = import.meta.env.VITE_N8N_ROOSTER_WEBHOOK_URL
 const N8N_PPC_WEBHOOK        = import.meta.env.VITE_N8N_PPC_WEBHOOK_URL
@@ -275,34 +274,6 @@ const getInitialEditValue = (colKey, raw) => {
   return raw ?? ''
 }
 
-function PasswordModal({ passwordModal, onPasswordChange, onConfirm, onCancel }) {
-  if (!passwordModal) return null
-
-  return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">Enter Password</h2>
-        <p className="modal-message">This action is password protected.</p>
-        <input
-          type="password"
-          className="input-password"
-          placeholder="Password"
-          value={passwordModal.input}
-          onChange={(e) => onPasswordChange(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && onConfirm()}
-          autoFocus
-        />
-        {passwordModal.error && (
-          <p className="password-error">{passwordModal.error}</p>
-        )}
-        <div className="modal-actions">
-          <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="modal-close-btn" onClick={onConfirm}>Confirm</button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 
 const CONTACT_TYPE_OPTIONS = ['Email', 'Phone', 'LinkedIn', 'Twitter', 'Website']
@@ -1067,7 +1038,6 @@ function App() {
   const [batchModal, setBatchModal]         = useState(null)
   const [pendingWebhookUrl, setPendingWebhookUrl] = useState(null)
   const [pendingExtraFields, setPendingExtraFields] = useState([])
-  const [passwordModal, setPasswordModal] = useState(null)
   const [profileModal, setProfileModal] = useState(null)
   const [profileRefreshKey, setProfileRefreshKey] = useState(0)
   const [editingCell, setEditingCell] = useState(null) // { rowId, colKey, value }
@@ -1660,16 +1630,6 @@ function App() {
     addNewModal.batchId && addNewModal.keyword.trim() && addNewModal.country &&
     addNewModal.url.trim() && addNewModal.domain.trim() && addNewModal.resultType
 
-  const handlePasswordConfirm = () => {
-    if (passwordModal.input !== MONDAY_PASSWORD) {
-      setPasswordModal((prev) => ({ ...prev, error: 'Incorrect password. Please try again.' }))
-      return
-    }
-    const onSuccess = passwordModal.onSuccess
-    setPasswordModal(null)
-    if (onSuccess) onSuccess()
-  }
-
   const handleBatchConfirm = async (batchIds) => {
     setBatchModal(null)
 
@@ -2135,8 +2095,8 @@ function App() {
         onCollectSTags={(row) => sendToWebhook(N8N_STAGS_WEBHOOK, [{ id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }])}
         onCollectContacts={(row) => sendToWebhook(N8N_CONTACTS_WEBHOOK, [{ id: row.id, url: row.url, domain: row.domain, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null }])}
         onTakeScreenshot={(row) => sendToWebhook(N8N_PPC_WEBHOOK, { id: row.id, url: row.url, domain: row.domain, result_type: row.result_type ?? null, country: row.country ?? null, is_rooster_partner: row.is_rooster_partner ?? null })}
-        onSendSTagUpdate={(tag) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null }) })}
-        onAddToMonday={(row, sTags, contacts) => setPasswordModal({ input: '', error: '', onSuccess: () => sendToWebhook(N8N_MONDAY_WEBHOOK, {
+        onSendSTagUpdate={(tag) => sendToWebhook(N8N_STAG_UPDATE_WEBHOOK, { s_tag_autoinc_id: tag.s_tag_autoinc_id, s_tag_id: tag.s_tag_id, s_tag: tag.s_tag, brand: tag.brand, domain: profileModal?.domain ?? null, board_id: tag.board_id ?? null, item_id: tag.item_id ?? null })}
+        onAddToMonday={(row, sTags, contacts) => sendToWebhook(N8N_MONDAY_WEBHOOK, {
           id: row.id,
           batch_id: row.batch_id ?? null,
           keyword: row.keyword ?? null,
@@ -2150,7 +2110,7 @@ function App() {
           screenshot_content_link: row.screenshot_content_link ?? null,
           s_tags: sTags,
           contact: contacts.filter((c) => c.is_chosen),
-        }) })}
+        })}
       />
 
       {deleteConfirm && (
@@ -2221,13 +2181,6 @@ function App() {
       )}
 
       <Modal modal={modal} onClose={handleModalClose} />
-
-      <PasswordModal
-        passwordModal={passwordModal}
-        onPasswordChange={(val) => setPasswordModal((prev) => ({ ...prev, input: val, error: '' }))}
-        onConfirm={handlePasswordConfirm}
-        onCancel={() => setPasswordModal(null)}
-      />
 
       <BatchSelectModal
         batchModal={batchModal}
